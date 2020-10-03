@@ -238,7 +238,7 @@ end
     t,
 )
     ν = viscosity_tensor(m)
-    #   D.ν∇u = ν * G.u
+    #  D.ν∇u = ν * G.u
     D.ν∇u = @SMatrix [
         m.νʰ*G.ud[1, 1] m.νʰ*G.ud[1, 2]
         m.νʰ*G.ud[2, 1] m.νʰ*G.ud[2, 2]
@@ -400,8 +400,8 @@ end
 
         # ∇h • (g η)
         #- jmc: put back this term to check
-        #       η = Q.η
-        #       F.u += grav(m.param_set) * η * Iʰ
+        #  η = Q.η
+        #  F.u += m.grav * η * Iʰ
 
         # ∇ • (u θ)
         F.θ += v * θ
@@ -425,9 +425,9 @@ end
     A::Vars,
     t::Real,
 )
-    # horizontal viscosity done in horizontal model
-    #   F.u -= @SVector([0, 0, 1]) * D.ν∇u[3, :]'
-    #- jmc: put back this term to check
+    #- vertical viscosity only (horizontal fluxes in horizontal model)
+    #  F.u -= @SVector([0, 0, 1]) * D.ν∇u[3, :]'
+    #- all 3 direction viscous flux for horizontal momentum tendency
     F.u -= D.ν∇u
 
     F.θ -= D.κ∇θ
@@ -450,7 +450,7 @@ end
 
         # f × u
         f = coriolis_force(m, A.y)
-        # S.u -= @SVector [-f * u[2], f * u[1]]
+        #  S.u -= @SVector [-f * u[2], f * u[1]]
         S.u -= @SVector [-f * ud[2], f * ud[1]]
 
         #- borotropic tendency adjustment
