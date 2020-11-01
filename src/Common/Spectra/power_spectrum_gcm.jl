@@ -98,10 +98,11 @@ function power_spectrum_2d(::AtmosGCMConfigType, var_grid, mass_weight)
 
         # Calculate energy spectra
         var_spectrum[:, :, k] =
+            0.5 .*
             sum(var_spherical[:, :, k, :], dims = 3) .*
             conj(sum(var_spherical[:, :, k, :], dims = 3))  # var_spectrum[m,n,k]
     end
-    return var_spectrum[2:end, 2:end, :] .* nθ .^ 2,
+    return var_spectrum,
     mesh.wave_numbers,
     var_spherical,
     mesh

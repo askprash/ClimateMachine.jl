@@ -104,8 +104,8 @@ function atmos_gcm_spectra_init(dgngrp, currtime)
         num_spherical = (num_fourier + 1) # number of total wavenumbers (n)
         dims = OrderedDict(
             "m" => (collect(FT, 1:1:length(lat[1])) .- 1, Dict()),
-            "m_t" => (collect(FT, 1:1:num_fourier) .- 1, Dict()),
-            "n" => (collect(FT, 1:1:num_spherical) .- 1, Dict()),
+            "m_t" => (collect(FT, 0:1:num_fourier) , Dict()),
+            "n" => (collect(FT, 0:1:num_spherical) , Dict()),
             "level" => level,
             "lat" => lat,
         )
