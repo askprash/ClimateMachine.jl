@@ -29,6 +29,8 @@ function coriolis_parameter end
 function kinematic_stress end
 function surface_flux end
 
+include("CartesianDomains/CartesianDomains.jl")
+
 include("OceanBC.jl")
 
 include("HydrostaticBoussinesq/HydrostaticBoussinesqModel.jl")
