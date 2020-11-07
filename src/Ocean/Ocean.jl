@@ -30,7 +30,6 @@ function kinematic_stress end
 function surface_flux end
 
 include("Fields.jl")
-include("CartesianDomains/CartesianDomains.jl")
 
 include("OceanBC.jl")
 
@@ -44,5 +43,7 @@ include("OceanProblems/OceanProblems.jl")
 include("SuperModels.jl")
 
 using .SuperModels: HydrostaticBoussinesqSuperModel, time, steps, Δt
+
+include("OceanProblems/OceanProblems.jl")
 
 end

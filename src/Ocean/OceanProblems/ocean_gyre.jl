@@ -44,6 +44,7 @@ initialize u,v,η with 0 and θ linearly distributed between 9 at z=0 and 1 at z
 - `Q`: state vector
 - `A`: auxiliary state vector, not used
 - `localgeo`: the local geometry information
+- `coords`: local spatial coordiantes
 - `t`: time to evaluate at, not used
 """
 function ocean_init_state!(
@@ -115,4 +116,3 @@ cool-warm north-south linear temperature gradient
     θʳ = θᴱ * (1 - y / Lʸ)
     return λʳ * (θ - θʳ)
 end
-
