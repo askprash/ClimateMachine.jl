@@ -303,7 +303,7 @@ function OceanBoxGCMConfiguration(
     N::Union{Int, NTuple{2, Int}},
     (Nˣ, Nʸ, Nᶻ)::NTuple{3, Int},
     param_set::AbstractParameterSet,
-    model::HydrostaticBoussinesqModel;
+    model;
     FT = Float64,
     array_type = ClimateMachine.array_type(),
     solver_type = ExplicitSolverType(
