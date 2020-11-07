@@ -29,6 +29,7 @@ function coriolis_parameter end
 function kinematic_stress end
 function surface_flux end
 
+include("Fields.jl")
 include("CartesianDomains/CartesianDomains.jl")
 
 include("OceanBC.jl")
@@ -40,8 +41,8 @@ include("SplitExplicit01/SplitExplicitModel.jl")
 include("OceanProblems/SimpleBoxProblem.jl")
 include("OceanProblems/OceanProblems.jl")
 
-include("SuperHydrostaticBoussinesqModels.jl")
+include("SuperModels.jl")
 
-using .SuperHydrostaticBoussinesqModels: SuperHydrostaticBoussinesqModel
+using .SuperModels: HydrostaticBoussinesqSuperModel, time, steps, Δt
 
 end
