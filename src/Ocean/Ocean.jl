@@ -42,7 +42,9 @@ include("OceanProblems/OceanProblems.jl")
 
 include("SuperModels.jl")
 
-using .SuperModels: HydrostaticBoussinesqSuperModel, time, steps, Δt
+using .OceanProblems: InitialConditions
+using .CartesianDomains: CartesianDomain, assemble
+using .SuperModels: HydrostaticBoussinesqSuperModel, current_time, steps, Δt
 
 include("OceanProblems/OceanProblems.jl")
 
