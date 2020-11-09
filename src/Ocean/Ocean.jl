@@ -48,6 +48,4 @@ include("SuperModels.jl")
 using .OceanProblems: InitialConditions
 using .SuperModels: HydrostaticBoussinesqSuperModel, current_time, steps, Δt
 
-include("OceanProblems/OceanProblems.jl")
-
 end

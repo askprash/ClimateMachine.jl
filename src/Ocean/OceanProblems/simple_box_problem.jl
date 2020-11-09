@@ -182,7 +182,6 @@ function ocean_init_state!(
     localgeo,
     t,
 )
-    coords = localgeo.coord
     k = (2π / p.Lˣ, 2π / p.Lʸ, 2π / p.H)
     ν = (m.νʰ, m.νʰ, m.νᶻ)
 
