@@ -17,8 +17,8 @@ using ClimateMachine.Spectra:
 include("test/Common/Spectra/spherical_helper_test.jl")
 
 # select the file and variable to output
-CLIMA_NETCDF = "/Users/lenka/Desktop/"; #location of .nc files
-var_name = "u"
+CLIMA_NETCDF = "/central/groups/esm/lenka/"; #location of .nc files
+var_name = "v"
 fnames = filter(x -> occursin(".nc", x), readdir( CLIMA_NETCDF ) );
 
 # extract data
@@ -50,7 +50,7 @@ contourf(m_,n_, (spectrum[:,:,1])', xlabel="m", ylabel ="n" )
 plot(n_[2:end], sum(spectrum[:,1:end-1,1] .+ 0.00001 ,dims=1)', xaxis=:log, yaxis=:log)
 
 # Check global magnitude
-println(sum(spectrum))
+println(sum(0.5 * spectrum))
 
 dθ = π / length(sinθ)
 EKE = 0.5 .* var[:,:,1] .^ 2

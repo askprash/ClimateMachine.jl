@@ -50,7 +50,7 @@ function power_spectrum_1d(::AtmosGCMConfigType, var_grid, z, lat, lon, weight)
             # convert to energy spectra
             zon_spectrum[1, j, k] =
                 zon_spectrum[1, j, k] +
-                0.5 * weight[k] * fourier[1] .* conj(fourier[1])
+                weight[k] * fourier[1] .* conj(fourier[1])
 
             for m in 2:num_pfourier
                 zon_spectrum[m, j, k] =
@@ -98,9 +98,9 @@ function power_spectrum_2d(::AtmosGCMConfigType, var_grid, mass_weight)
 
         # Calculate energy spectra
         var_spectrum[:, :, k] =
-            0.5 .*
-            sum(var_spherical[:, :, k, :], dims = 3) .*
-            conj(sum(var_spherical[:, :, k, :], dims = 3))  # var_spectrum[m,n,k]
+            2.0 .* sum(var_spherical[:, :, k, :], dims = 3) .*
+            conj(sum(var_spherical[:, :, k, :], dims = 3))  # var_spectrum[m,n,k] # factor 2 to account for negative Fourier frequencies
+        var_spectrum[1,:,k] = var_spectrum[1,:,k] ./ 2.0 # m=0
     end
     return var_spectrum,
     mesh.wave_numbers,
