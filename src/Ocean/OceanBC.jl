@@ -81,6 +81,9 @@ struct KinematicStress{S} <: VelocityDragBC
     end
 end
 
+KinematicStress(stress=nothing) = KinematicStress(stress)
+
+>>>>>>> 61dfb50f2... Simple non-breaking functions-as-stresses interface
 kinematic_stress(problem, y, ρ₀) = @SVector [0, 0] # fallback for generic problems
 kinematic_stress(problem, y, ρ₀, ::Nothing) = kinematic_stress(problem, y, ρ₀)
 kinematic_stress(problem, y, ρ₀, drag) = drag.stress(y)
