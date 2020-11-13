@@ -33,7 +33,6 @@ if generate_tutorials
             "Linear Non-Hydrostatic Mountain (Topography)" =>
                 "Atmos/agnesi_nh_lin.jl",
         ],
-        "Ocean" => [],
         "Land" => [
             "Heat" => ["Heat Equation" => "Land/Heat/heat_equation.jl"],
             "Soil" => [
@@ -46,6 +45,13 @@ if generate_tutorials
                 "Coupled Water and Heat" =>
                     "Land/Soil/Coupled/equilibrium_test.jl",
             ],
+        ],
+        "Ocean" => [
+            "One-dimensional geostrophic adjustment" =>
+                "Ocean/geostrophic_adjustment.jl",
+            "Eddy radiating Rossby waves" => "Ocean/radiating_eddy.jl",
+            "Propagating mode-1 internal wave" => "Ocean/internal_wave.jl",
+            "Free surface shear instability" => "Ocean/shear_instability.jl",
         ],
         "Numerics" => [
             "System Solvers" => [

@@ -9,7 +9,9 @@ export AbstractOceanModel,
     Uncoupled,
     Coupled,
     AdvectionTerm,
-    NonLinearAdvectionTerm
+    NonLinearAdvectionTerm,
+
+    InitialConditions
 
 abstract type AbstractOceanModel <: BalanceLaw end
 abstract type AbstractOceanProblem <: AbstractProblem end
@@ -29,7 +31,8 @@ function coriolis_parameter end
 function kinematic_stress end
 function surface_flux end
 
-include("Fields.jl")
+include(joinpath("Domains", "Domains.jl"))
+include(joinpath("Fields", "Fields.jl"))
 
 include("OceanBC.jl")
 
@@ -43,7 +46,6 @@ include("OceanProblems/OceanProblems.jl")
 include("SuperModels.jl")
 
 using .OceanProblems: InitialConditions
-using .CartesianDomains: CartesianDomain, assemble
 using .SuperModels: HydrostaticBoussinesqSuperModel, current_time, steps, Δt
 
 include("OceanProblems/OceanProblems.jl")
