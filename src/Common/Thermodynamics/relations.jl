@@ -590,6 +590,31 @@ function total_energy(
 end
 
 """
+    total_energy_given_ρp(param_set, ρ, p, e_kin, e_pot[, q::PhasePartition])
+
+The total energy per unit mass, given
+
+ - `param_set` an `AbstractParameterSet`, see the [`Thermodynamics`](@ref) for more details
+ - `e_kin` kinetic energy per unit mass
+ - `e_pot` potential energy per unit mass
+ - `ρ` (moist-)air density
+ - `p` pressure
+and, optionally,
+ - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
+"""
+function total_energy_given_ρp(
+    param_set::APS,
+    ρ::FT,
+    p::FT,
+    e_kin::FT,
+    e_pot::FT,
+    q::PhasePartition{FT} = q_pt_0(FT),
+) where {FT <: Real}
+    T = air_temperature_from_ideal_gas_law(param_set, p, ρ, q)
+    return total_energy(param_set, e_kin, e_pot, T, q)
+end
+
+"""
     soundspeed_air(param_set, T[, q::PhasePartition])
 
 The speed of sound in unstratified air, where

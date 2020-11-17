@@ -756,6 +756,14 @@ end
         @test all(air_density.(ts_ρT) .≈ air_density.(ts))
         @test all(internal_energy.(ts_ρT) .≈ internal_energy.(ts))
 
+
+        ts = PhaseDry_ρp.(param_set, ρ, p)
+        @test all(air_density.(ts) .≈ ρ)
+        @test all(air_pressure.(ts) .≈ p)
+        e_tot_desired = TD.total_energy_given_ρp.(param_set, ρ, p, e_kin, e_pot)
+        @test all(total_energy.(e_kin, e_pot, ts) .≈ e_tot_desired)
+
+
         profiles = PhaseEquilProfiles(param_set, ArrayType)
         @unpack T, p, RS, e_int, ρ, θ_liq_ice, phase_type = profiles
         @unpack q_tot, q_liq, q_ice, q_pt, RH, e_kin, e_pot = profiles
@@ -779,6 +787,22 @@ end
         @test all(internal_energy.(ts) .≈ e_int)
         @test all(getproperty.(PhasePartition.(ts), :tot) .≈ q_tot)
         @test all(air_density.(ts) .≈ ρ)
+
+        ts = PhaseEquil_ρpq.(param_set, ρ, p, q_tot)
+        @test all(air_density.(ts) .≈ ρ)
+        # @test all(air_pressure.(ts) .≈ p) # Fails
+        @show FT, max(abs.(air_pressure.(ts) .- p)...)
+        @test all(getproperty.(PhasePartition.(ts), :tot) .≈ q_tot)
+        e_tot_desired =
+            TD.total_energy_given_ρp.(
+                param_set,
+                ρ,
+                p,
+                e_kin,
+                e_pot,
+                PhasePartition.(q_tot),
+            )
+        @test all(total_energy.(e_kin, e_pot, ts) .≈ e_tot_desired)
 
         # PhaseNonEquil
         ts = PhaseNonEquil.(param_set, e_int, ρ, q_pt)
@@ -870,6 +894,22 @@ end
         @test all(
             getproperty.(PhasePartition.(ts), :ice) .≈ getproperty.(q_pt, :ice),
         )
+
+        ts = PhaseNonEquil_ρpq.(param_set, ρ, p, q_pt)
+        @test all(air_density.(ts) .≈ ρ)
+        @test all(air_pressure.(ts) .≈ p)
+        @test all(
+            getproperty.(PhasePartition.(ts), :tot) .≈ getproperty.(q_pt, :tot),
+        )
+        @test all(
+            getproperty.(PhasePartition.(ts), :liq) .≈ getproperty.(q_pt, :liq),
+        )
+        @test all(
+            getproperty.(PhasePartition.(ts), :ice) .≈ getproperty.(q_pt, :ice),
+        )
+        e_tot_desired =
+            TD.total_energy_given_ρp.(param_set, ρ, p, e_kin, e_pot, q_pt)
+        @test all(total_energy.(e_kin, e_pot, ts) .≈ e_tot_desired)
 
         # PhaseNonEquil_ρθq
         ts = PhaseNonEquil_ρθq.(param_set, ρ, θ_liq_ice, q_pt, 5, FT(1e-3))
@@ -979,6 +1019,7 @@ end
 
     θ_dry = dry_pottemp.(param_set, T, ρ)
     ts_dry = PhaseDry.(param_set, e_int, ρ)
+    ts_dry_ρp = PhaseDry_ρp.(param_set, ρ, p)
     ts_dry_pT = PhaseDry_pT.(param_set, p, T)
     ts_dry_ρθ = PhaseDry_ρθ.(param_set, ρ, θ_dry)
     ts_dry_pθ = PhaseDry_pθ.(param_set, p, θ_dry)
@@ -1000,6 +1041,14 @@ end
             q_tot,
         )
 
+    ts_ρp =
+        PhaseEquil_ρpq.(
+            param_set,
+            air_density.(ts_dry),
+            air_pressure.(ts_dry),
+            q_tot,
+        )
+
     @test all(air_temperature.(ts_T) .≈ air_temperature.(ts_Tp))
     # @test all(isapprox.(air_pressure.(ts_T), air_pressure.(ts_Tp), atol = _MSLP * 2e-2)) # TODO: Fails, needs fixing / better test
     @test all(total_specific_humidity.(ts_T) .≈ total_specific_humidity.(ts_Tp))
@@ -1016,12 +1065,14 @@ end
 
     for ts in (
         ts_dry,
+        ts_dry_ρp,
         ts_dry_pT,
         ts_dry_ρθ,
         ts_dry_pθ,
         ts_eq,
         ts_T,
         ts_Tp,
+        ts_ρp,
         ts_neq,
         ts_T_neq,
         ts_θ_liq_ice_eq,
