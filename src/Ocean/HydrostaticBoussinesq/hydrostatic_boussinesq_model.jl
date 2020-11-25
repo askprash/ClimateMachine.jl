@@ -1,54 +1,3 @@
-module HydrostaticBoussinesq
-
-export HydrostaticBoussinesqModel
-
-using StaticArrays
-using LinearAlgebra: dot, Diagonal
-using CLIMAParameters.Planet: grav
-
-using ..Ocean
-using ...VariableTemplates
-using ...MPIStateArrays
-using ...Mesh.Filters: apply!
-using ...Mesh.Grids: VerticalDirection
-using ...Mesh.Geometry
-using ...DGMethods
-using ...DGMethods: init_state_auxiliary!
-using ...DGMethods.NumericalFluxes
-using ...BalanceLaws
-
-import ..Ocean: coriolis_parameter
-import ...DGMethods.NumericalFluxes: update_penalty!
-import ...BalanceLaws:
-    vars_state,
-    init_state_prognostic!,
-    init_state_auxiliary!,
-    compute_gradient_argument!,
-    compute_gradient_flux!,
-    flux_first_order!,
-    flux_second_order!,
-    source!,
-    wavespeed,
-    boundary_conditions,
-    boundary_state!,
-    update_auxiliary_state!,
-    update_auxiliary_state_gradient!,
-    integral_load_auxiliary_state!,
-    integral_set_auxiliary_state!,
-    indefinite_stack_integral!,
-    reverse_indefinite_stack_integral!,
-    reverse_integral_load_auxiliary_state!,
-    reverse_integral_set_auxiliary_state!
-import ..Ocean:
-    ocean_init_state!,
-    ocean_init_aux!,
-    ocean_boundary_state!,
-    _ocean_boundary_state!
-
-×(a::SVector, b::SVector) = StaticArrays.cross(a, b)
-⋅(a::SVector, b::SVector) = StaticArrays.dot(a, b)
-⊗(a::SVector, b::SVector) = a * b'
-
 """
     HydrostaticBoussinesqModel <: BalanceLaw
 
@@ -72,7 +21,7 @@ fₒ = first coriolis parameter (constant term)
     HydrostaticBoussinesqModel(problem)
 
 """
-struct HydrostaticBoussinesqModel{C, PS, P, MA, TA, F, T, I} <: BalanceLaw
+struct HydrostaticBoussinesqModel{C, PS, P, MA, TA, F, FT, I} <: BalanceLaw
     param_set::PS
     problem::P
     coupling::C
@@ -80,17 +29,17 @@ struct HydrostaticBoussinesqModel{C, PS, P, MA, TA, F, T, I} <: BalanceLaw
     tracer_advection::TA
     forcing::F
     state_filter::I
-    ρₒ::T
-    cʰ::T
-    cᶻ::T
-    αᵀ::T
-    νʰ::T
-    νᶻ::T
-    κʰ::T
-    κᶻ::T
-    κᶜ::T
-    fₒ::T
-    β::T
+    ρₒ::FT
+    cʰ::FT
+    cᶻ::FT
+    αᵀ::FT
+    νʰ::FT
+    νᶻ::FT
+    κʰ::FT
+    κᶻ::FT
+    κᶜ::FT
+    fₒ::FT
+    β::FT
     function HydrostaticBoussinesqModel{FT}(
         param_set::PS,
         problem::P;
@@ -110,8 +59,8 @@ struct HydrostaticBoussinesqModel{C, PS, P, MA, TA, F, T, I} <: BalanceLaw
         κᶜ = FT(1e-1),  # m^2 / s # diffusivity for convective adjustment
         fₒ = FT(1e-4),  # Hz
         β = FT(1e-11), # Hz / m
-    ) where {FT <: AbstractFloat, PS, P, C, MA, TA, F}
-        return new{I, C, PS, P, MA, TA, F, FT}(
+    ) where {FT <: AbstractFloat, PS, P, C, MA, TA, F, I}
+        return new{C, PS, P, MA, TA, F, FT, I}(
             param_set,
             problem,
             coupling,
@@ -135,6 +84,8 @@ struct HydrostaticBoussinesqModel{C, PS, P, MA, TA, F, T, I} <: BalanceLaw
 end
 
 HBModel = HydrostaticBoussinesqModel
+
+boundary_conditions(ocean::HBModel) = ocean.problem.boundary_conditions
 
 @inline noforcing(args...) = 0
 
@@ -165,8 +116,8 @@ end
 sets the initial value for state variables
 dispatches to ocean_init_state! which is defined in a problem file such as SimpleBoxProblem.jl
 """
-function init_state_prognostic!(m::HBModel, Q::Vars, A::Vars, localgeo, t)
-    return ocean_init_state!(m, m.problem, Q, A, localgeo, t)
+function init_state_prognostic!(m::HBModel, Q::Vars, A::Vars, coords, t)
+    return ocean_init_state!(m, m.problem, Q, A, coords, t)
 end
 
 """
@@ -194,6 +145,8 @@ function vars_state(m::HBModel, ::Auxiliary, T)
         ΔGᵘ::SVector{2, T}   # vertically averaged tendency
     end
 end
+
+function ocean_init_aux! end
 
 """
     init_state_auxiliary!(::HBModel)
@@ -751,14 +704,12 @@ function update_auxiliary_state_gradient!(
 
     # project w(z=0) down the stack
     data = reshape(A.data, Nqh, Nqk, number_aux, nelemv, nelemh)
-    flat_wz0 = @view data[:, end:end, index_w, end:end, 1:nrealelemh]
-    boxy_wz0 = @view data[:, :, index_wz0, :, 1:nrealelemh]
+    flat_wz0 = @view data[:, end:end, index_w, end:end, 1:nhorzrealelem]
+    boxy_wz0 = @view data[:, :, index_wz0, :, 1:nhorzrealelem]
     boxy_wz0 .= flat_wz0
 
     return true
 end
-
-boundary_conditions(ocean::HBModel) = ocean.problem.boundary_conditions
 
 """
     boundary_state!(nf, ::HBModel, args...)
@@ -766,8 +717,9 @@ boundary_conditions(ocean::HBModel) = ocean.problem.boundary_conditions
 applies boundary conditions for the hyperbolic fluxes
 dispatches to a function in OceanBoundaryConditions.jl based on bytype defined by a problem such as SimpleBoxProblem.jl
 """
-@inline function boundary_state!(nf, bc, ocean::HBModel, args...)
-    return _ocean_boundary_state!(nf, bc, ocean, args...)
+@inline function boundary_state!(nf, ocean::HBModel, args...)
+    boundary_conditions = ocean.problem.boundary_conditions
+    return ocean_boundary_state!(nf, boundary_conditions, ocean, args...)
 end
 
 """
@@ -781,11 +733,6 @@ splits boundary condition application into velocity and temperature conditions
 
     return nothing
 end
-
-include("bc_velocity.jl")
-include("bc_temperature.jl")
-include("LinearHBModel.jl")
-include("Courant.jl")
 
 """
     ocean_boundary_state!(nf, boundaries::Tuple, ::HBModel,
@@ -871,5 +818,4 @@ dispatches to a function in OceanBoundaryConditions.jl based on bytype defined b
         ) # elseexpr
         return nothing
     end
->>>>>>> 52d86073a... Implements SuperHydrostaticBoussinesqModel and internal wave example:src/Ocean/HydrostaticBoussinesq/hydrostatic_boussinesq_model.jl
 end

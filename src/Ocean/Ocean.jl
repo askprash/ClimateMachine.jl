@@ -10,7 +10,6 @@ export AbstractOceanModel,
     Coupled,
     AdvectionTerm,
     NonLinearAdvectionTerm,
-
     InitialConditions
 
 abstract type AbstractOceanModel <: BalanceLaw end
@@ -43,7 +42,6 @@ using .HydrostaticBoussinesq: HydrostaticBoussinesqModel, Forcing
 include("ShallowWater/ShallowWaterModel.jl")
 include("SplitExplicit/SplitExplicitModel.jl")
 include("SplitExplicit01/SplitExplicitModel.jl")
-include("OceanProblems/SimpleBoxProblem.jl")
 include("OceanProblems/OceanProblems.jl")
 
 include("SuperModels.jl")

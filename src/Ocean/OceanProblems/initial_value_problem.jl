@@ -74,7 +74,7 @@ InitialConditions(; u = resting, v = resting, θ = resting, η = resting) =
     InitialConditions(u, v, θ, η)
 
 """
-    ocean_init_state!(::HydrostaticBoussinesqModel, ic::InitialCondition, state, aux, coords, time)
+    ocean_init_state!(::HydrostaticBoussinesqModel, ic::InitialCondition, state, aux, local_geometry, time)
 
 Initialize the state variables `u = (u, v)` (a vector), `θ`, and `η`. Mutates `state`.
 
@@ -85,12 +85,12 @@ function ocean_init_state!(
     ivp::InitialValueProblem,
     state,
     aux,
-    coords,
+    local_geometry,
     time,
 )
 
     ics = ivp.initial_conditions
-    x, y, z = coords
+    x, y, z = local_geometry.coord
 
     state.u = @SVector [ics.u(x, y, z), ics.v(x, y, z)]
     state.θ = ics.θ(x, y, z)

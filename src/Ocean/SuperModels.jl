@@ -17,7 +17,7 @@ using ..Ocean: FreeSlip, Impenetrable, Insulating, OceanBC, Penetrable
 using ..Ocean.Fields: SpectralElementField
 
 using ...Mesh.Filters: CutoffFilter, ExponentialFilter
-using ...Mesh.Grids: polynomialorder, DiscontinuousSpectralElementGrid
+using ...Mesh.Grids: polynomialorders, DiscontinuousSpectralElementGrid
 
 using ClimateMachine:
     LS3NRK33Heuns,
@@ -148,7 +148,7 @@ function HydrostaticBoussinesqSuperModel(;
     # Default vertical filter and horizontal exponential filter:
     if isnothing(filters)
         filters = (
-            vert_filter = CutoffFilter(grid, polynomialorder(grid)),
+            vert_filter = CutoffFilter(grid, polynomialorders(grid)),
             exp_filter = ExponentialFilter(grid, 1, 8),
         )
     end
@@ -163,7 +163,7 @@ function HydrostaticBoussinesqSuperModel(;
     driver_configuration = DriverConfiguration(
         OceanBoxGCMConfigType(),
         "",
-        domain.Np,
+        (domain.Np, domain.Np),
         eltype(domain),
         array_type,
         timestepper,

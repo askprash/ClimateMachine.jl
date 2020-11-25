@@ -39,7 +39,7 @@ struct NonDimensionalParameters <: AbstractEarthParameterSet end
 Planet.grav(::NonDimensionalParameters) = 1
 
 initial_conditions = InitialConditions(
-    u = (x, y, z) -> sech(y) * (1 + 0.1 * cos(x))
+    u = (x, y, z) -> sech(y) * (1 + 0.1 * cos(x)),
     v = (x, y, z) -> 0.1 * sech(y) * sin(y),
     θ = (x, y, z) -> x,
 )

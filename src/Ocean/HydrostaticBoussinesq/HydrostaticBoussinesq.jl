@@ -20,6 +20,7 @@ using ...BalanceLaws
 
 import ..Ocean: coriolis_parameter
 import ...DGMethods.NumericalFluxes: update_penalty!
+
 import ...BalanceLaws:
     vars_state,
     init_state_prognostic!,
@@ -39,6 +40,7 @@ import ...BalanceLaws:
     reverse_indefinite_stack_integral!,
     reverse_integral_load_auxiliary_state!,
     reverse_integral_set_auxiliary_state!
+
 import ..Ocean: ocean_init_state!, ocean_init_aux!
 
 ×(a::SVector, b::SVector) = StaticArrays.cross(a, b)

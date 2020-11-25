@@ -2,8 +2,6 @@ using MPI
 
 using ClimateMachine: Settings
 
-using ClimateMachine.Mesh.Grids: polynomialorder
-
 using ClimateMachine.Mesh.Topologies: StackedBrickTopology
 
 import ClimateMachine.Mesh.Grids: DiscontinuousSpectralElementGrid
