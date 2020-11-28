@@ -11,12 +11,26 @@ using ClimateMachine.DGMethods: LocalGeometry, DGModel
 
 import ClimateMachine.Atmos: atmos_source!
 
+using ClimateMachine.Atmos: Advect
+using ClimateMachine.BalanceLaws:
+    PrognosticVariable,
+    TendencyDef,
+    Source,
+    Flux,
+    AbstractTendencyType,
+    FirstOrder,
+    SecondOrder
+
 import ClimateMachine.BalanceLaws:
     vars_state,
     update_auxiliary_state!,
     init_state_prognostic!,
     flux_first_order!,
     flux_second_order!,
+    prognostic_vars,
+    eq_tends,
+    flux,
+    source,
     compute_gradient_argument!,
     compute_gradient_flux!
 
@@ -150,6 +164,68 @@ function vars_state(m::EDMF, st::GradientFlux, FT)
         updraft::vars_state(m.updraft, st, FT)
     )
 end
+
+abstract type EDMFPrognosticVariable <: PrognosticVariable end
+
+abstract type EnvironmentPrognosticVariable <: EDMFPrognosticVariable end
+struct en_ρatke <: EnvironmentPrognosticVariable end
+struct en_ρaθ_liq_cv <: EnvironmentPrognosticVariable end
+struct en_ρaq_tot_cv <: EnvironmentPrognosticVariable end
+struct en_ρaθ_liq_q_tot_cv <: EnvironmentPrognosticVariable end
+
+abstract type UpdraftPrognosticVariable{i} <: EDMFPrognosticVariable end
+struct up_ρa{i} <: UpdraftPrognosticVariable{i} end
+struct up_ρaw{i} <: UpdraftPrognosticVariable{i} end
+struct up_ρaθ_liq{i} <: UpdraftPrognosticVariable{i} end
+struct up_ρaq_tot{i} <: UpdraftPrognosticVariable{i} end
+
+prognostic_vars(m::EDMF) =
+    (prognostic_vars(m.environment)..., prognostic_vars(m.updraft)...)
+prognostic_vars(m::Environment) =
+    (en_ρatke(), en_ρaθ_liq_cv(), en_ρaq_tot_cv(), en_ρaθ_liq_q_tot_cv())
+
+function prognostic_vars(m::NTuple{N, Updraft}) where {N}
+    # Not sure which one we want:
+
+    # Pros of ntuple:
+    #     - Can link prognostic_vars with output from @vars()
+    #     - Can customize the i-th updraft if needed
+    # Cons of ntuple:
+    #     - Many more types
+    #     - table incorporates duplicates (which we could fix/modify in show_tendencies)
+
+    # t_ρa = ntuple(i-> up_ρa{i}(), N)
+    # t_ρaw = ntuple(i-> up_ρaw{i}(), N)
+    # t_ρaθ_liq = ntuple(i-> up_ρaθ_liq{i}(), N)
+    # t_ρaq_tot = ntuple(i-> up_ρaq_tot{i}(), N)
+    # t = (t_ρa..., t_ρaw..., t_ρaθ_liq..., t_ρaq_tot...)
+
+    t_ρa = up_ρa{N}()
+    t_ρaw = up_ρaw{N}()
+    t_ρaθ_liq = up_ρaθ_liq{N}()
+    t_ρaq_tot = up_ρaq_tot{N}()
+    t = (t_ρa, t_ρaw, t_ρaθ_liq, t_ρaq_tot)
+    return t
+end
+
+# Dycore tendencies
+eq_tends(
+    pv::PV,
+    m::EDMF,
+    ::Flux{SecondOrder},
+) where {PV <: Union{Momentum, Energy, TotalMoisture}} = ()
+# (SGSFlux{PV}(),) # to add SGSFlux back to grid-mean
+
+# Turbconv tendencies
+eq_tends(pv::PV, m::EDMF, ::Flux{O}) where {O, PV <: EDMFPrognosticVariable} =
+    ()
+
+eq_tends(pv::PV, m::EDMF, ::Flux{FirstOrder}) where {PV <: EDMFPrognosticVariable} =
+    (Advect{PV}(),)
+
+struct SGSFlux{PV <: Union{Momentum, Energy, TotalMoisture}} <:
+       TendencyDef{Flux{SecondOrder}, PV} end
+
 
 """
     init_aux_turbconv!(
@@ -501,23 +577,11 @@ function atmos_source!(
     # covariance microphysics sources should be applied here
 end;
 
-# # in the EDMF first order (advective) fluxes exist only in the grid mean (if <w> is nonzero) and the uprdafts
-function flux_first_order!(
-    turbconv::EDMF{FT},
-    m::AtmosModel{FT},
-    flux::Grad,
-    state::Vars,
-    aux::Vars,
-    t::Real,
-    ts,
-    direction,
-) where {FT}
+function compute_ρa_up(m, state, aux)
     # Aliases:
+    turbconv = m.turbconv
     gm = state
     up = state.turbconv.updraft
-    en = state.turbconv.environment
-    up_flx = flux.turbconv.updraft
-    en_flx = flux.turbconv.environment
     N_up = n_updrafts(turbconv)
 
     ρ_inv = 1 / gm.ρ
@@ -529,20 +593,102 @@ function flux_first_order!(
     ρa_up = vuntuple(N_up) do i
         gm.ρ * enforce_unit_bounds(up[i].ρa * ρ_inv, a_min, a_max)
     end
+    return ρa_up
+end
 
-    @unroll_map(N_up) do i
-        ρa_i = ρa_up[i]
-        up_flx[i].ρa = up[i].ρaw * ẑ
-        w_up_i = up[i].ρaw / ρa_i
-        up_flx[i].ρaw = up[i].ρaw * w_up_i * ẑ
-        up_flx[i].ρaθ_liq = w_up_i * up[i].ρaθ_liq * ẑ
-        up_flx[i].ρaq_tot = w_up_i * up[i].ρaq_tot * ẑ
-    end
+function flux(::Advect{up_ρa{i}}, m, state, aux, t, ts, direction) where {i}
+    up = state.turbconv.updraft
+    ẑ = vertical_unit_vector(m, aux)
+    return up[i].ρaw * ẑ
+end
+function flux(::Advect{up_ρaw{i}}, m, state, aux, t, ts, direction) where {i}
+    up = state.turbconv.updraft
+    ẑ = vertical_unit_vector(m, aux)
+    ρa_up = compute_ρa_up(m, state, aux)
+    return up[i].ρaw * up[i].ρaw / ρa_up[i] * ẑ
+end
+function flux(
+    ::Advect{up_ρaθ_liq{i}},
+    m,
+    state,
+    aux,
+    t,
+    ts,
+    direction,
+) where {i}
+    up = state.turbconv.updraft
+    ẑ = vertical_unit_vector(m, aux)
+    ρa_up = compute_ρa_up(m, state, aux)
+    return up[i].ρaw * up[i].ρaθ_liq / ρa_up[i] * ẑ
+end
+function flux(
+    ::Advect{up_ρaq_tot{i}},
+    m,
+    state,
+    aux,
+    t,
+    ts,
+    direction,
+) where {i}
+    up = state.turbconv.updraft
+    ẑ = vertical_unit_vector(m, aux)
+    ρa_up = compute_ρa_up(m, state, aux)
+    return up[i].ρaw * up[i].ρaq_tot / ρa_up[i] * ẑ
+end
+
+function flux(::Advect{en_ρatke}, m, state, aux, t, ts, direction)
+    N_up = n_updrafts(m.turbconv)
+    en = state.turbconv.environment
+    ẑ = vertical_unit_vector(m, aux)
     env = environment_vars(state, aux, N_up)
-    en_flx.ρatke = en.ρatke * env.w * ẑ
-    en_flx.ρaθ_liq_cv = en.ρaθ_liq_cv * env.w * ẑ
-    en_flx.ρaq_tot_cv = en.ρaq_tot_cv * env.w * ẑ
-    en_flx.ρaθ_liq_q_tot_cv = en.ρaθ_liq_q_tot_cv * env.w * ẑ
+    return en.ρatke * env.w * ẑ
+end
+function flux(::Advect{en_ρaθ_liq_cv}, m, state, aux, t, ts, direction)
+    N_up = n_updrafts(m.turbconv)
+    en = state.turbconv.environment
+    ẑ = vertical_unit_vector(m, aux)
+    env = environment_vars(state, aux, N_up)
+    return en.ρaθ_liq_cv * env.w * ẑ
+end
+function flux(::Advect{en_ρaq_tot_cv}, m, state, aux, t, ts, direction)
+    N_up = n_updrafts(m.turbconv)
+    en = state.turbconv.environment
+    ẑ = vertical_unit_vector(m, aux)
+    env = environment_vars(state, aux, N_up)
+    return en.ρaq_tot_cv * env.w * ẑ
+end
+function flux(::Advect{en_ρaθ_liq_q_tot_cv}, m, state, aux, t, ts, direction)
+    N_up = n_updrafts(m.turbconv)
+    en = state.turbconv.environment
+    ẑ = vertical_unit_vector(m, aux)
+    env = environment_vars(state, aux, N_up)
+    return en.ρaθ_liq_q_tot_cv * env.w * ẑ
+end
+
+# # in the EDMF first order (advective) fluxes exist only
+# in the grid mean (if <w> is nonzero) and the uprdafts
+function flux_first_order!(
+    turbconv::EDMF{FT},
+    m::AtmosModel{FT},
+    flux::Grad,
+    state::Vars,
+    aux::Vars,
+    t::Real,
+    ts,
+) where {FT}
+    tend = Flux{FirstOrder}()
+    up_flx = flux.turbconv.updraft
+    N_up = n_updrafts(turbconv)
+    args = (m, state, aux, t, ts, direction)
+    @unroll_map(N_up) do i
+        up_flx[i].ρaw = Σfluxes(eq_tends(up_ρaw{i}(), m, tend), args...)
+        up_flx[i].ρaθ_liq = Σfluxes(eq_tends(up_ρaθ_liq{i}(), m, tend), args...)
+        up_flx[i].ρaq_tot = Σfluxes(eq_tends(up_ρaq_tot{i}(), m, tend), args...)
+    end
+    en_flx.ρatke = Σfluxes(eq_tends(en_ρatke(), m, tend), args...)
+    en_flx.ρaθ_liq_cv = Σfluxes(eq_tends(en_ρaθ_liq_cv(), m, tend), args...)
+    en_flx.ρaq_tot_cv = Σfluxes(eq_tends(en_ρaq_tot_cv(), m, tend), args...)
+    en_flx.ρaθ_liq_q_tot_cv = Σfluxes(eq_tends(en_ρaθ_liq_q_tot_cv(), m, tend), args...)
 end;
 
 # in the EDMF second order (diffusive) fluxes
