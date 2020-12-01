@@ -113,7 +113,7 @@ function _ocean_boundary_state!(
     t,
     _...,
 )
-    ocean_boundary_state!(nf, bc, ocean, Q⁺, A⁺, n, Q⁻, A⁻, t)
+    return ocean_boundary_state!(nf, bc, ocean, Q⁺, A⁺, n, Q⁻, A⁻, t)
 end
 
 function _ocean_boundary_state!(
@@ -130,5 +130,5 @@ function _ocean_boundary_state!(
     t,
     _...,
 )
-    ocean_boundary_state!(nf, bc, ocean, Q⁺, D⁺, A⁺, n, Q⁻, D⁻, A⁻, t)
+    return ocean_boundary_state!(nf, bc, ocean, Q⁺, D⁺, A⁺, n, Q⁻, D⁻, A⁻, t)
 end

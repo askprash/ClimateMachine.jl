@@ -32,6 +32,7 @@ import ...BalanceLaws:
     source!,
     wavespeed,
     boundary_state!,
+    boundary_conditions,
     update_auxiliary_state!,
     update_auxiliary_state_gradient!,
     integral_load_auxiliary_state!,
@@ -41,7 +42,11 @@ import ...BalanceLaws:
     reverse_integral_load_auxiliary_state!,
     reverse_integral_set_auxiliary_state!
 
-import ..Ocean: ocean_init_state!, ocean_init_aux!
+import ..Ocean:
+    ocean_init_state!,
+    ocean_init_aux!,
+    ocean_boundary_state!,
+    _ocean_boundary_state!
 
 ×(a::SVector, b::SVector) = StaticArrays.cross(a, b)
 ⋅(a::SVector, b::SVector) = StaticArrays.dot(a, b)

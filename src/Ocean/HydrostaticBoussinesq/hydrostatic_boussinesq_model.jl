@@ -704,13 +704,23 @@ function update_auxiliary_state_gradient!(
 
     # project w(z=0) down the stack
     data = reshape(A.data, Nqh, Nqk, number_aux, nelemv, nelemh)
-    flat_wz0 = @view data[:, end:end, index_w, end:end, 1:nhorzrealelem]
-    boxy_wz0 = @view data[:, :, index_wz0, :, 1:nhorzrealelem]
+    flat_wz0 = @view data[:, end:end, index_w, end:end, 1:nrealelemh]
+    boxy_wz0 = @view data[:, :, index_wz0, :, 1:nrealelemh]
     boxy_wz0 .= flat_wz0
 
     return true
 end
 
+"""
+    boundary_state!(nf, bc, ::HBModel, args...)
+
+applies boundary conditions for the hyperbolic fluxes
+dispatches to a function in OceanBoundaryConditions.jl based on bytype defined by a problem such as SimpleBoxProblem.jl
+"""
+@inline boundary_state!(nf, bc, ocean::HBModel, args...) =
+    _ocean_boundary_state!(nf, bc, ocean, args...)
+
+#=
 """
     boundary_state!(nf, ::HBModel, args...)
 
@@ -721,9 +731,10 @@ dispatches to a function in OceanBoundaryConditions.jl based on bytype defined b
     boundary_conditions = ocean.problem.boundary_conditions
     return ocean_boundary_state!(nf, boundary_conditions, ocean, args...)
 end
+=#
 
 """
-    ocean_boundary_state!(nf, bc::OceanBC, ::HBModel)
+    ocean_boundary_state!(nf, bc::OceanBC, ::HBModel, args...)
 
 splits boundary condition application into velocity and temperature conditions
 """
@@ -737,6 +748,7 @@ end
 """
     ocean_boundary_state!(nf, boundaries::Tuple, ::HBModel,
                           Q⁺, A⁺, n, Q⁻, A⁻, bctype)
+
 applies boundary conditions for the first-order and gradient fluxes
 dispatches to a function in OceanBoundaryConditions.jl based on bytype defined by a problem such as SimpleBoxProblem.jl
 """
@@ -778,6 +790,7 @@ end
 """
     ocean_boundary_state!(nf, boundaries::Tuple, ::HBModel,
                           Q⁺, A⁺, D⁺, n, Q⁻, A⁻, D⁻, bctype)
+
 applies boundary conditions for the second-order fluxes
 dispatches to a function in OceanBoundaryConditions.jl based on bytype defined by a problem such as SimpleBoxProblem.jl
 """

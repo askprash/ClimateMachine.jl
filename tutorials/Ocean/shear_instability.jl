@@ -46,7 +46,7 @@ initial_conditions = InitialConditions(
 
 model = Ocean.HydrostaticBoussinesqSuperModel(
     domain = domain,
-    time_step = 0.05,
+    time_step = 0.02,
     initial_conditions = initial_conditions,
     parameters = NonDimensionalParameters(),
     turbulence_closure = (νʰ = 1e-3, κʰ = 1e-3,
