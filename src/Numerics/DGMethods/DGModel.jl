@@ -1817,7 +1817,8 @@ function launch_interface_tendency!(
 
     # If the model direction is EveryDirection, we need to perform
     # both horizontal AND vertical kernel calls; otherwise, we only
-    # call the kernel corresponding to the model direction `spacedisc.diffusion_direction`
+    # call the kernel corresponding to the model direction
+    # `spacedisc.diffusion_direction`
     if spacedisc.direction isa EveryDirection ||
        spacedisc.direction isa HorizontalDirection
 
@@ -1830,7 +1831,8 @@ function launch_interface_tendency!(
             ndrange = workgroup * info.nexteriorelem
         end
 
-        # Hoirzontal polynomial order (assumes same for both horizontal directions)
+        # Hoirzontal polynomial order (assumes same for both horizontal
+        # directions)
         horizontal_polyorder = info.N[1]
 
         comp_stream = dgsem_interface_tendency!(info.device, workgroup)(
@@ -1860,16 +1862,15 @@ function launch_interface_tendency!(
     # Vertical kernel call
     if spacedisc.direction isa EveryDirection ||
        spacedisc.direction isa VerticalDirection
+        elems =
+            surface === :interior ? elems = spacedisc.grid.interiorelems :
+            spacedisc.grid.exteriorelems
 
-        if spacedisc isa DGModel
+        if length(elems) == 0
+            # Nothing to see or do here!
+        elseif spacedisc isa DGModel
             workgroup = info.Nfp_h
-            if surface === :interior
-                elems = spacedisc.grid.interiorelems
-                ndrange = workgroup * info.ninteriorelem
-            else
-                elems = spacedisc.grid.exteriorelems
-                ndrange = workgroup * info.nexteriorelem
-            end
+            ndrange = workgroup * length(elems)
 
             # Vertical polynomial degree
             vertical_polyorder = info.N[info.dim]
@@ -1897,25 +1898,27 @@ function launch_interface_tendency!(
                 dependencies = comp_stream,
             )
         elseif spacedisc isa DGFVMModel
-            workgroup = info.Nfp_h
-            if surface === :interior
-                elems = spacedisc.grid.interiorelems
-                ndrange = workgroup * info.ninteriorelem
-            else
-                elems = spacedisc.grid.exteriorelems
-                ndrange = workgroup * info.nexteriorelem
-            end
-
             # Make sure FVM in the vertical
             @assert info.N[info.dim] == 0
 
-            # XXX: This will need to be updated to diffusion
+            # The FVM will only work on stacked grids!
             @assert isstacked(spacedisc.grid.topology)
+
+            # Figute out the stacking of the mesh
             nvertelem = spacedisc.grid.topology.stacksize
+            nhorzelem = div(length(elems), nvertelem)
+            periodicstack = spacedisc.grid.topology.periodicstack
+
+            # 2-D workgroup
+            workgroup = info.Nfp_h
+            ndrange = workgroup * nhorzelem
+
+            # XXX: This will need to be updated to diffusion
             comp_stream = vert_fvm_interface_tendency!(info.device, workgroup)(
                 spacedisc.balance_law,
                 Val(info),
-                Val(nvertelem)
+                Val(nvertelem),
+                Val(periodicstack),
                 VerticalDirection(),
                 spacedisc.numerical_flux_first_order,
                 tendency.data,
