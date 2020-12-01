@@ -140,7 +140,7 @@ end
 
 using Printf
 using ClimateMachine.GenericCallbacks: EveryXSimulationSteps
-using ClimateMachine.Ocean: current_time
+using ClimateMachine.Ocean: current_time, current_step, Δt
 
 print_every = 100 # iterations
 wall_clock = [time_ns()]
