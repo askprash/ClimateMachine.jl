@@ -34,7 +34,7 @@ function SpectralElementField(
     domain::AbstractDomain,
     grid::DiscontinuousSpectralElementGrid,
     state::MPIStateArray,
-    variable_index::Int
+    variable_index::Int,
 )
 
     data = view(state.data, :, variable_index, :)
@@ -46,7 +46,8 @@ end
 
 const SEF = SpectralElementField
 
-Base.@propagate_inbounds Base.getindex(field::SEF, i, j, k) = field.elements[i, j, k]
+Base.@propagate_inbounds Base.getindex(field::SEF, i, j, k) =
+    field.elements[i, j, k]
 Base.size(field::SEF) = size(field.elements)
 Base.eltype(field::SEF) = eltype(field.realdata)
 
@@ -56,7 +57,8 @@ Base.minimum(f, field::SEF) = minimum([minimum(f, el) for el in field.elements])
 Base.maximum(field::SEF) = maximum([maximum(el) for el in field.elements])
 Base.minimum(field::SEF) = minimum([minimum(el) for el in field.elements])
 
-Base.show(io::IO, field::SEF{E}) where {E} = print(io, "SpectralElementField{$(E.name.wrapper)}")
+Base.show(io::IO, field::SEF{E}) where {E} =
+    print(io, "SpectralElementField{$(E.name.wrapper)}")
 
 #####
 ##### Domain-specific stuff

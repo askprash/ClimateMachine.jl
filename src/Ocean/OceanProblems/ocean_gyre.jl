@@ -92,10 +92,8 @@ jet stream like windstress
 @inline kinematic_stress(p::OceanGyre, y, ρ) =
     @SVector [(p.τₒ / ρ) * cos(y * π / p.Lʸ), -0]
 
-@inline kinematic_stress(
-    p::OceanGyre,
-    y,
-) = @SVector [-p.τₒ * cos(π * y / p.Lʸ), -0]
+@inline kinematic_stress(p::OceanGyre, y) =
+    @SVector [-p.τₒ * cos(π * y / p.Lʸ), -0]
 
 """
     surface_flux(::OceanGyre)

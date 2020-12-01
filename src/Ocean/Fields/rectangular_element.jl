@@ -19,7 +19,12 @@ end
 Returns a Cartesian view into the `realdata` and nodes (located in `grid`)
 associated with `element_index`.
 """
-function RectangularElement(domain::RectangularDomain, grid, realdata, element_index)
+function RectangularElement(
+    domain::RectangularDomain,
+    grid,
+    realdata,
+    element_index,
+)
     volume_geometry = grid.vgeo
 
     Np = domain.Np
@@ -62,14 +67,18 @@ Base.minimum(element::RectangularElement) = minimum(element.data)
 
 function Base.show(io::IO, elem::RectangularElement{D}) where {D}
     intro = "RectangularElement{$(D.name.wrapper)} with "
-    data = @sprintf("data ∈ [%.2e, %.2e]\n", minimum(elem.data), maximum(elem.data))
+    data = @sprintf(
+        "data ∈ [%.2e, %.2e]\n",
+        minimum(elem.data),
+        maximum(elem.data)
+    )
     x = @sprintf("    x ∈ [%.2e, %.2e]\n", minimum(elem.x), maximum(elem.x))
     y = @sprintf("    y ∈ [%.2e, %.2e]", minimum(elem.y), maximum(elem.y))
     z = @sprintf("    z ∈ [%.2e, %.2e]", minimum(elem.z), maximum(elem.z))
 
     return print(io, intro, data, x, y, z)
-end    
-    
+end
+
 
 #####
 ##### ⟨⟨ Assemble! ⟩⟩
@@ -132,7 +141,9 @@ data(elem::RectangularElement) = elem.data
 Assemble the three-dimensional data in `elements` into a single `Array`,
 averaging data on shared nodes.
 """
-function assemble(elements::Array{T, 3}) where T <: Union{RectangularElement, AbstractArray}
+function assemble(
+    elements::Array{T, 3},
+) where {T <: Union{RectangularElement, AbstractArray}}
 
     Nx, Ny, Nz = size(elements)
 

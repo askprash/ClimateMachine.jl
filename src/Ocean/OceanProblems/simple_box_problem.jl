@@ -210,7 +210,7 @@ function barotropic_state!(
 )
     gH, _ = params
 
-    M = @SMatrix [-νˣ * kˣ^2 gH * kˣ; -kˣ 0]
+    M = @SMatrix [-νˣ*kˣ^2 gH*kˣ; -kˣ 0]
     A = exp(M * t) * @SVector [1, 1]
 
     U = A[1] * sin(kˣ * x)
@@ -244,7 +244,7 @@ function barotropic_state!(
 )
     gH, f = params
 
-    M = @SMatrix [-νˣ * kˣ^2 f gH * kˣ; -f -νˣ * kˣ^2 0; -kˣ 0 0]
+    M = @SMatrix [-νˣ*kˣ^2 f gH*kˣ; -f -νˣ*kˣ^2 0; -kˣ 0 0]
     A = exp(M * t) * @SVector [1, 1, 1]
 
     U = A[1] * sin(kˣ * x)

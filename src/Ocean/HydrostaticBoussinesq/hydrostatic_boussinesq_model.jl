@@ -89,8 +89,8 @@ boundary_conditions(ocean::HBModel) = ocean.problem.boundary_conditions
 
 @inline noforcing(args...) = 0
 
-function Forcing(; u=noforcing, v=noforcing, η=noforcing, θ=noforcing)
-    return (u=u, v=v, η=η, θ=θ)
+function Forcing(; u = noforcing, v = noforcing, η = noforcing, θ = noforcing)
+    return (u = u, v = v, η = η, θ = θ)
 end
 
 """
@@ -577,7 +577,7 @@ Computations:
 
     Su = m.forcing.u(args...)
     Sv = m.forcing.v(args...)
-    
+
     S.u += @SVector [Su, Sv]
     S.η += m.forcing.η(args...)
     S.θ += m.forcing.θ(args...)

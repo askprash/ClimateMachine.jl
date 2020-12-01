@@ -33,7 +33,7 @@ function Base.show(io::IO, domain::RectangularDomain{FT}) where {FT}
 
     return print(io, first, second, third)
 end
-    
+
 name_it(Ne::NamedTuple{(:x, :y, :z)}) = Ne
 name_it(Ne) = (x = Ne[1], y = Ne[2], z = Ne[3])
 

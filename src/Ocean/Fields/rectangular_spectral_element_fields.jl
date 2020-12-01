@@ -31,14 +31,14 @@ function SpectralElementField(
     grid::DiscontinuousSpectralElementGrid,
     realdata::AbstractArray,
     data::Union{AbstractArray, Nothing} = nothing,
-    realelems::Union{UnitRange, Nothing} = nothing
+    realelems::Union{UnitRange, Nothing} = nothing,
 ) where {FT}
 
     # Build element list
     Te = prod(domain.Ne) # total number of elements
-    
+
     element_list = [RectangularElement(domain, grid, realdata, i) for i in 1:Te]
-    
+
     # Transfer coordinate data to CPU for element sorting
     volume_geometry = grid.vgeo
 
@@ -53,5 +53,12 @@ function SpectralElementField(
     Ne = domain.Ne
     element_array = reshape(element_list, Ne.x, Ne.y, Ne.z)
 
-    return SpectralElementField(element_array, domain, grid, realdata, data, realelems)
+    return SpectralElementField(
+        element_array,
+        domain,
+        grid,
+        realdata,
+        data,
+        realelems,
+    )
 end

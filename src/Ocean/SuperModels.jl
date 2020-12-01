@@ -95,7 +95,7 @@ function HydrostaticBoussinesqSuperModel(;
     #####
     ##### Build the grid
     #####
-    
+
     # Change global setting if its set here
     Settings.array_type = array_type
 
@@ -103,7 +103,7 @@ function HydrostaticBoussinesqSuperModel(;
         domain;
         boundary_tags = boundary_tags,
         mpicomm = mpicomm,
-        array_type = array_type
+        array_type = array_type,
     )
 
     FT = eltype(domain)

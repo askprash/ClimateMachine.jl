@@ -65,7 +65,5 @@ jet stream like windstress
 @inline kinematic_stress(p::HomogeneousBox, y, ρ) =
     @SVector [(p.τₒ / ρ) * cos(y * π / p.Lʸ), -0]
 
-@inline kinematic_stress(
-    p::HomogeneousBox,
-    y,
-) = @SVector [-p.τₒ * cos(π * y / p.Lʸ), -0]
+@inline kinematic_stress(p::HomogeneousBox, y) =
+    @SVector [-p.τₒ * cos(π * y / p.Lʸ), -0]

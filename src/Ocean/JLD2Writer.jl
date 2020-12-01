@@ -7,17 +7,17 @@ using ClimateMachine.Ocean: current_step, current_time
 using ..Fields: SpectralElementField
 
 struct JLD2Writer{A, F, M, O}
-    filepath :: F
-    model :: M
-    outputs :: O
-    array_type :: A
+    filepath::F
+    model::M
+    outputs::O
+    array_type::A
 end
 
-function Base.show(io::IO, writer::JLD2Writer{A}) where A
+function Base.show(io::IO, writer::JLD2Writer{A}) where {A}
 
-    header =   "JLD2Writer{$A}"
+    header = "JLD2Writer{$A}"
     filepath = "    ├── filepath: $(writer.filepath)"
-    outputs =  "    └── $(length(writer.outputs)) outputs: $(keys(ow.outputs))"
+    outputs = "    └── $(length(writer.outputs)) outputs: $(keys(ow.outputs))"
 
     print(io, header, '\n', filepath, '\n', outputs)
 
@@ -34,13 +34,20 @@ Returns a utility for writing field output to JLD2 files, `overwrite_existing` f
 
 Field data is converted to `array_type` before outputting.
 """
-function JLD2Writer(model, outputs=model.fields; filepath, array_type=Array, overwrite_existing=true)
+function JLD2Writer(
+    model,
+    outputs = model.fields;
+    filepath,
+    array_type = Array,
+    overwrite_existing = true,
+)
 
     # Convert grid to CPU
-    cpu_grid = DiscontinuousSpectralElementGrid(model.domain, array_type=array_type)
+    cpu_grid =
+        DiscontinuousSpectralElementGrid(model.domain, array_type = array_type)
 
     # Initialize output
-    overwrite_existing && isfile(filepath) && rm(filepath; force=true)
+    overwrite_existing && isfile(filepath) && rm(filepath; force = true)
 
     file = jldopen(filepath, "a+")
 
@@ -51,8 +58,8 @@ function JLD2Writer(model, outputs=model.fields; filepath, array_type=Array, ove
 
     writer = JLD2Writer(filepath, model, outputs, array_type)
 
-    write!(writer, first=true)
-    
+    write!(writer, first = true)
+
     return writer
 end
 
@@ -61,7 +68,7 @@ initialize_output!(file, args...) = nothing
 initialize_output!(file, field::SpectralElementField, name) =
     file["$name/meta/realelems"] = field.realelems
 
-function write!(writer::JLD2Writer; first=false)
+function write!(writer::JLD2Writer; first = false)
 
     model = writer.model
     filepath = writer.filepath
@@ -104,18 +111,18 @@ function write_single_output!(file, output, name, N_output, writer)
 end
 
 struct OutputTimeSeries{F, N, D, G, T, S}
-    filepath :: F
-    name :: N
-    domain :: D
-    grid :: G
-    times :: T
-    steps :: S
+    filepath::F
+    name::N
+    domain::D
+    grid::G
+    times::T
+    steps::S
 end
 
 function OutputTimeSeries(name, filepath)
     file = jldopen(filepath)
 
-    domain, grid, times, steps = [nothing for i=1:4]
+    domain, grid, times, steps = [nothing for i in 1:4]
 
     try
         domain = file["domain"]

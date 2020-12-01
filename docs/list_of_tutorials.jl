@@ -51,7 +51,8 @@ if generate_tutorials
                 "Ocean/geostrophic_adjustment.jl",
             "Eddy radiating Rossby waves" => "Ocean/radiating_eddy.jl",
             "Propagating mode-1 internal wave" => "Ocean/internal_wave.jl",
-            "Free surface shear instability" => "Ocean/shear_instability.jl",
+            "Free surface shear instability" =>
+                "Ocean/shear_instability.jl",
         ],
         "Numerics" => [
             "System Solvers" => [
