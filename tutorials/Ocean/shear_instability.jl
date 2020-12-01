@@ -23,12 +23,12 @@ using CLIMAParameters: AbstractEarthParameterSet, Planet
 # We begin by specifying the domain and mesh,
 
 domain = RectangularDomain(
-    Ne = (32, 32, 1),
+    Ne = (24, 24, 1),
     Np = 4,
-    x = (-4π, 4π),
-    y = (-4π, 4π),
+    x = (-3π, 3π),
+    y = (-3π, 3π),
     z = (0, 1),
-    periodicity = (true, true, false),
+    periodicity = (true, false, false),
 )
 
 # Note that the default solid-wall boundary conditions are free-slip and
@@ -39,20 +39,20 @@ struct NonDimensionalParameters <: AbstractEarthParameterSet end
 Planet.grav(::NonDimensionalParameters) = 1
 
 initial_conditions = InitialConditions(
-    u = (x, y, z) -> sech(y) * (1 + 0.1 * cos(x)),
-    v = (x, y, z) -> 0.1 * sech(y) * sin(y),
+    u = (x, y, z) -> tanh(y) + 0.1 * cos(x / 3) + 0.01 * randn(),
+    v = (x, y, z) -> 0.1 * sin(y / 3),
     θ = (x, y, z) -> x,
 )
 
 model = Ocean.HydrostaticBoussinesqSuperModel(
     domain = domain,
-    time_step = 0.02,
+    time_step = 0.05,
     initial_conditions = initial_conditions,
     parameters = NonDimensionalParameters(),
-    turbulence_closure = (νʰ = 1e-3, κʰ = 1e-3,
-                          νᶻ = 1e-1, κᶻ = 1e-1),
-    rusanov_wave_speeds = (cʰ = 1, cᶻ = 1),
-    boundary_tags = ((0, 0), (0, 0), (1, 2)),
+    turbulence_closure = (νʰ = 1e-2, κʰ = 1e-2,
+                          νᶻ = 1e-2, κᶻ = 1e-2),
+    rusanov_wave_speeds = (cʰ = 0.1, cᶻ = 1),
+    boundary_tags = ((0, 0), (1, 1), (1, 2)),
     boundary_conditions = (
         OceanBC(Impenetrable(FreeSlip()), Insulating()),
         OceanBC(Penetrable(FreeSlip()), Insulating()),
