@@ -16,7 +16,7 @@ using ClimateMachine.Ocean.Domains
 using ClimateMachine.Ocean.Fields
 
 using ClimateMachine.GenericCallbacks: EveryXSimulationTime
-using ClimateMachine.Ocean: steps, Δt, current_time
+using ClimateMachine.Ocean: current_step, Δt, current_time
 using CLIMAParameters: AbstractEarthParameterSet, Planet
 
 # We begin by specifying a few parameters:
@@ -31,13 +31,12 @@ hour = 3600.0 # comes in handy
 # Next we specify the domain
 
 domain = RectangularDomain(
-    elements = (16, 24, 3),
-    polynomialorder = 4,
+    Ne = (16, 24, 3),
+    Np = 4,
     x = (0, Lx),
     y = (0, Ly),
     z = (-H, 0),
     periodicity = (false, false, false),
-    boundary = ((1, 1), (1, 1), (2, 3)),
 )
 
 # # Boundary conditions
@@ -72,13 +71,14 @@ initial_conditions = InitialConditions(θ = linear_gradient)
 
 model = Ocean.HydrostaticBoussinesqSuperModel(
     domain = domain,
-    time_step = hour,
+    time_step = hour / 4,
     initial_conditions = initial_conditions,
     parameters = EarthParameters(),
     turbulence_closure = (νʰ = 5e3, νᶻ = 5e-3, κʰ = 1e3, κᶻ = 1e-4),
     rusanov_wave_speeds = (cʰ = 1, cᶻ = 1e-3),
     buoyancy = (αᵀ = 1 / Planet.grav(EarthParameters()),),
     coriolis = (f₀ = 1e-4, β = 1e-11),
+    boundary_tags = ((1, 1), (1, 1), (2, 3)),
     boundary_conditions = boundary_conditions,
 )
 
@@ -89,7 +89,7 @@ u, v, η, θ = model.fields
 fetched_states = []
 
 data_fetcher = EveryXSimulationTime(24hour) do
-    @info "Step: $(steps(model)), hours: $(current_time(model) / hour), max|u|: $(maximum(abs, u))"
+    @info "Step: $(current_step(model)), hours: $(current_time(model) / hour), max|u|: $(maximum(abs, u))"
 
     push!(
         fetched_states,
