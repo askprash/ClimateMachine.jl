@@ -99,14 +99,14 @@ using CLIMAParameters: AbstractEarthParameterSet, Planet
 #
 # We now choose parameters for the Eady instability problem.
 
-Nh = 128
-Nz = 16
-Np = 2
+Nh = 32
+Nz = 4
+Np = 4
 
 L = 1e6 # Domain width (m)
 H = 1e3 # Domain height (m)
 f = 1e-4 # Coriolis parameter (s⁻¹)
-α = 2f # Geostrophic shear (s⁻¹)
+α = 5f # Geostrophic shear (s⁻¹)
 N² = 1e-5 # Initial buoyancy gradient (s⁻²)
 νh = κh = 1e3 # Horizontal viscosity and diffusivity (m² s⁻¹)
 νz = κh = 1e-2 # Vertical viscosity and diffusivity (m² s⁻¹)
