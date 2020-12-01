@@ -27,7 +27,7 @@ using CLIMAParameters.Planet: MSLP, R_d, day, grav, Omega, planet_radius
 struct EarthParameterSet <: AbstractEarthParameterSet end
 const param_set = EarthParameterSet()
 
-function init_baroclinic_wave!(problem, bl, state, aux, coords, t)
+function init_baroclinic_wave!(problem, bl, state, aux, localgeo, t)
     FT = eltype(state)
 
     # parameters
@@ -220,9 +220,9 @@ function main()
 
     # Driver configuration parameters
     FT = Float64                             # floating type precision
-    poly_order = 3                           # discontinuous Galerkin polynomial order
-    n_horz = 12                              # horizontal element number
-    n_vert = 6                               # vertical element number
+    poly_order = 5                           # discontinuous Galerkin polynomial order
+    n_horz = 8                              # horizontal element number
+    n_vert = 4                               # vertical element number
     n_days::FT = 1
     timestart::FT = 0                        # start time (s)
     timeend::FT = n_days * day(param_set)    # end time (s)

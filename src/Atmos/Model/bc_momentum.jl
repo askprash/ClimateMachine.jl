@@ -113,7 +113,6 @@ function atmos_momentum_boundary_state!(
     n,
     state⁻,
     aux⁻,
-    bctype,
     t,
     args...,
 )
@@ -128,7 +127,6 @@ function atmos_momentum_boundary_state!(
     n,
     state⁻,
     aux⁻,
-    bctype,
     t,
     args...,
 )
@@ -159,7 +157,6 @@ function atmos_momentum_boundary_state!(
     n,
     state⁻,
     aux⁻,
-    bctype,
     t,
     args...,
 )
@@ -174,7 +171,6 @@ function atmos_momentum_boundary_state!(
     n,
     state⁻,
     aux⁻,
-    bctype,
     t,
     args...,
 )
@@ -208,7 +204,6 @@ function atmos_momentum_boundary_state!(
     n,
     state⁻,
     aux⁻,
-    bctype,
     t,
     args...,
 ) where {DL <: DragLaw}
@@ -221,7 +216,6 @@ function atmos_momentum_boundary_state!(
         n,
         state⁻,
         aux⁻,
-        bctype,
         t,
         args...,
     )
@@ -240,7 +234,6 @@ function atmos_momentum_normal_boundary_flux_second_order!(
     diffusive⁺,
     hyperdiffusive⁺,
     aux⁺,
-    bctype,
     t,
     state_int⁻,
     diffusive_int⁻,

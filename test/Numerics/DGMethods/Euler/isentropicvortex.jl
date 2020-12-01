@@ -219,7 +219,7 @@ function test_run(
     )
 
     problem = AtmosProblem(
-        boundarycondition = (),
+        boundaryconditions = (),
         init_state_prognostic = isentropicvortex_initialcondition!,
     )
 
@@ -231,7 +231,7 @@ function test_run(
         ref_state = NoReferenceState(),
         turbulence = ConstantDynamicViscosity(FT(0)),
         moisture = DryModel(),
-        source = nothing,
+        source = (),
     )
 
     dg = DGModel(
@@ -337,13 +337,13 @@ function isentropicvortex_initialcondition!(
     bl,
     state,
     aux,
-    coords,
+    localgeo,
     t,
     args...,
 )
     setup = first(args)
     FT = eltype(state)
-    x = MVector(coords)
+    x = MVector(localgeo.coord)
 
     ρ∞ = setup.ρ∞
     p∞ = setup.p∞

@@ -87,7 +87,7 @@ using ClimateMachine.ODESolvers
 using ClimateMachine.Mesh.Filters
 # - Required so functions for computation of temperature profiles.
 using ClimateMachine.TemperatureProfiles
-# - Required so functions for computation of moist thermodynamic quantities and turbulence closures 
+# - Required so functions for computation of moist thermodynamic quantities and turbulence closures
 # are available.
 using ClimateMachine.Thermodynamics
 using ClimateMachine.TurbulenceClosures
@@ -127,7 +127,9 @@ const param_set = EarthParameterSet()
 #md #     - `state.tracers.ρχ` = Vector of four tracers (here, for demonstration
 #md #       only; we can interpret these as dye injections for visualisation
 #md #       purposes)
-function init_densitycurrent!(problem, bl, state, aux, (x, y, z), t)
+function init_densitycurrent!(problem, bl, state, aux, localgeo, t)
+    (x, y, z) = localgeo.coord
+
     ## Problem float-type
     FT = eltype(state)
 
@@ -180,7 +182,14 @@ end
 # ## [Model Configuration](@id config-helper)
 # We define a configuration function to assist in prescribing the physical
 # model.
-function config_densitycurrent(FT, N, resolution, xmax, ymax, zmax)
+function config_densitycurrent(
+    ::Type{FT},
+    N,
+    resolution,
+    xmax,
+    ymax,
+    zmax,
+) where {FT}
 
     ## Choose an Explicit Single-rate Solver LSRK144 from the existing [ODESolvers](@ref
     ## ODESolvers-docs) options Apply the outer constructor to define the
@@ -290,12 +299,7 @@ end
 #
 # ## References
 #
-# [1] J. Straka, R. Wilhelmson, L. Wicker, J. Anderson, K. Droegemeier,
-# Numerical solution of a nonlinear density current: a benchmark solution and comparisons
-# Int. J. Numer. Methods Fluids 17 (1993) 1–22,  https://doi.org/10.1002/fld.1650170103
-#
-# [2] R. Carpenter, K. Droegemeier, P. Woodward, C. Hane,
-# Application of the piecewise parabolic method (PPM) to meteorological modeling,
-# Mon. Weather Rev. 118 (1990) 586–612, https://doi.org/10.1175/1520-0493(1990)118<0586:AOTPPM>2.0.CO;2
+# - [Straka1993](@cite)
+# - [Carpenter1990](@cite)
 
 main()

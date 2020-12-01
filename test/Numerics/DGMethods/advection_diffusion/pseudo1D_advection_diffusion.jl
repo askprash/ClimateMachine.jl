@@ -33,21 +33,21 @@ function init_velocity_diffusion!(
     geom::LocalGeometry,
 ) where {n, α, β}
     # Direction of flow is n with magnitude α
-    aux.u = α * n
+    aux.advection.u = α * n
 
     # diffusion of strength β in the n direction
-    aux.D = β * n * n'
+    aux.diffusion.D = β * n * n'
 end
 
 function initial_condition!(
     ::Pseudo1D{n, α, β, μ, δ},
     state,
     aux,
-    x,
+    localgeo,
     t,
 ) where {n, α, β, μ, δ}
-    ξn = dot(n, x)
-    # ξT = SVector(x) - ξn * n
+    ξn = dot(n, localgeo.coord)
+    # ξT = SVector(localgeo.coord) - ξn * n
     state.ρ = exp(-(ξn - μ - α * t)^2 / (4 * β * (δ + t))) / sqrt(1 + t / δ)
 end
 Dirichlet_data!(P::Pseudo1D, x...) = initial_condition!(P, x...)
@@ -129,7 +129,7 @@ function test_run(
         DeviceArray = ArrayType,
         polynomialorder = N,
     )
-    model = AdvectionDiffusion{dim, fluxBC}(Pseudo1D{n, α, β, μ, δ}())
+    model = AdvectionDiffusion{dim}(Pseudo1D{n, α, β, μ, δ}(), flux_bc = fluxBC)
     dg = DGModel(
         model,
         grid,
@@ -278,8 +278,9 @@ let
 
     @testset "$(@__FILE__)" begin
         for FT in (Float64, Float32)
-            numlevels = integration_testing ||
-            ClimateMachine.Settings.integration_testing ?
+            numlevels =
+                integration_testing ||
+                ClimateMachine.Settings.integration_testing ?
                 (FT == Float64 ? 4 : 3) : 1
             result = zeros(FT, numlevels)
             for dim in 2:3
@@ -287,18 +288,21 @@ let
                     (EveryDirection, HorizontalDirection, VerticalDirection)
                     for fluxBC in (true, false)
                         if direction <: EveryDirection
-                            n = dim == 2 ?
+                            n =
+                                dim == 2 ?
                                 SVector{3, FT}(1 / sqrt(2), 1 / sqrt(2), 0) :
                                 SVector{3, FT}(
-                                1 / sqrt(3),
-                                1 / sqrt(3),
-                                1 / sqrt(3),
-                            )
+                                    1 / sqrt(3),
+                                    1 / sqrt(3),
+                                    1 / sqrt(3),
+                                )
                         elseif direction <: HorizontalDirection
-                            n = dim == 2 ? SVector{3, FT}(1, 0, 0) :
+                            n =
+                                dim == 2 ? SVector{3, FT}(1, 0, 0) :
                                 SVector{3, FT}(1 / sqrt(2), 1 / sqrt(2), 0)
                         elseif direction <: VerticalDirection
-                            n = dim == 2 ? SVector{3, FT}(0, 1, 0) :
+                            n =
+                                dim == 2 ? SVector{3, FT}(0, 1, 0) :
                                 SVector{3, FT}(0, 0, 1)
                         end
                         α = FT(1)
@@ -308,8 +312,7 @@ let
                         for l in 1:numlevels
                             Ne = 2^(l - 1) * base_num_elem
                             brickrange = ntuple(
-                                j -> range(FT(-1); length = Ne + 1,
-                                    stop = 1),
+                                j -> range(FT(-1); length = Ne + 1, stop = 1),
                                 dim,
                             )
                             periodicity = ntuple(j -> false, dim)
@@ -329,11 +332,12 @@ let
                             dt = outputtime / ceil(Int64, outputtime / dt)
 
                             @info (ArrayType, FT, dim, direction, fluxBC)
-                            vtkdir = output ?
+                            vtkdir =
+                                output ?
                                 "vtk_advection" *
-                            "_poly$(polynomialorder)" *
-                            "_dim$(dim)_$(ArrayType)_$(FT)_$(direction)" *
-                            "_level$(l)" :
+                                "_poly$(polynomialorder)" *
+                                "_dim$(dim)_$(ArrayType)_$(FT)_$(direction)" *
+                                "_level$(l)" :
                                 nothing
                             result[l] = test_run(
                                 mpicomm,

@@ -19,8 +19,8 @@ mutable struct SolverConfiguration{FT}
     dt::FT
     init_on_cpu::Bool
     numberofsteps::Int
-    init_args
-    solver
+    init_args::Any
+    solver::Any
 end
 
 """
@@ -94,6 +94,7 @@ function SolverConfiguration(
     direction = get_direction(driver_config.config_type),
     timeend_dt_adjust = true,
     CFL_direction = get_direction(driver_config.config_type),
+    sim_time = Settings.sim_time,
     fixed_number_of_steps = Settings.fixed_number_of_steps,
     skip_update_aux = false,
 ) where {FT <: AbstractFloat}
@@ -101,9 +102,6 @@ function SolverConfiguration(
 
     bl = driver_config.bl
     grid = driver_config.grid
-    numerical_flux_first_order = driver_config.numerical_flux_first_order
-    numerical_flux_second_order = driver_config.numerical_flux_second_order
-    numerical_flux_gradient = driver_config.numerical_flux_gradient
 
     # Create the DG model and initialize the ODE state. If we're restarting,
     # use state data from the checkpoint.
@@ -124,11 +122,7 @@ function SolverConfiguration(
             dg.state_auxiliary .= state_auxiliary
         else
             dg = DGModel(
-                bl,
-                grid,
-                numerical_flux_first_order,
-                numerical_flux_second_order,
-                numerical_flux_gradient;
+                driver_config;
                 state_auxiliary = state_auxiliary,
                 direction = direction,
                 diffusion_direction = diffdir,
@@ -147,11 +141,7 @@ function SolverConfiguration(
             dg = driver_config.config_info.dg
         else
             dg = DGModel(
-                bl,
-                grid,
-                numerical_flux_first_order,
-                numerical_flux_second_order,
-                numerical_flux_gradient;
+                driver_config;
                 fill_nan = Settings.debug_init,
                 direction = direction,
                 diffusion_direction = diffdir,
@@ -224,6 +214,9 @@ function SolverConfiguration(
             t0,
             CFL_direction,
         )
+    end
+    if !isnan(sim_time)
+        timeend = sim_time
     end
     if fixed_number_of_steps < 0
         numberofsteps = convert(Int, cld(timeend - t0, ode_dt))

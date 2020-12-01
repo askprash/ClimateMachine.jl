@@ -43,18 +43,7 @@ The available concrete implementations are:
   - [`MRIGARKESDIRK46aSandu`](@ref)
 
 ### References
-
-    @article{Sandu2019,
-        title={A class of multirate infinitesimal gark methods},
-        author={Sandu, Adrian},
-        journal={SIAM Journal on Numerical Analysis},
-        volume={57},
-        number={5},
-        pages={2300--2327},
-        year={2019},
-        publisher={SIAM},
-        doi={10.1137/18M1205492}
-    }
+ - [Sandu2019](@cite)
 """
 mutable struct MRIGARKDecoupledImplicit{
     T,
@@ -75,7 +64,7 @@ mutable struct MRIGARKDecoupledImplicit{
     "elapsed time steps"
     steps::Int
     "rhs function"
-    slowrhs!
+    slowrhs!::Any
     "backwark Euler solver"
     besolver!::BE
     "Storage for RHS during the `MRIGARKDecoupledImplicit` update"
@@ -388,30 +377,8 @@ Carpenter (2016).
 The free parameter `δ` can take any values for accuracy.
 
 ### References
-
-    @article{Bank1985,
-        title={Transient simulation of silicon devices and circuits},
-        author={R. E. Bank and W. M. Coughran and W. Fichtner and
-                E. H. Grosse and D. J. Rose and R. K. Smith},
-        journal={IEEE Transactions on Computer-Aided Design of Integrated
-                 Circuits and Systems},
-        volume={4},
-        number={4},
-        pages={436-451},
-        year={1985},
-        publisher={IEEE},
-        doi={10.1109/TCAD.1985.1270142}
-    }
-
-    @techreport{KennedyCarpenter2016,
-        title = {Diagonally implicit Runge-Kutta methods for ordinary
-                 differential equations. A review},
-                 author = {C. A. Kennedy and M. H. Carpenter},
-        institution = {National Aeronautics and Space Administration},
-        year = {2016},
-        number = {NASA/TM–2016–219173},
-        address = {Langley Research Center, Hampton, VA}
-    }
+ - [Bank1985](@cite)
+ - [KennedyCarpenter2016](@cite)
 """
 function MRIGARKESDIRK23LSA(
     slowrhs!,
@@ -516,8 +483,8 @@ function MRIGARKESDIRK24LSA(
     A = [
         0 0 0 0
         γ γ 0 0
-        c3 - a32 - γ a32 γ 0
-        1 - b2 - b3 - γ b2 b3 γ
+        c3 - a32-γ a32 γ 0
+        1 - b2 - b3-γ b2 b3 γ
     ]
     c = sum(A, dims = 2)
     b = A[end, :]

@@ -26,7 +26,7 @@ Base.@kwdef struct AcousticWaveSetup{FT}
     nv::Int = 1
 end
 
-function (setup::AcousticWaveSetup)(problem, bl, state, aux, coords, t)
+function (setup::AcousticWaveSetup)(problem, bl, state, aux, localgeo, t)
     # callable to set initial conditions
     FT = eltype(state)
 
@@ -80,7 +80,7 @@ function main()
         ref_state = ref_state,
         turbulence = turbulence,
         moisture = DryModel(),
-        source = Gravity(),
+        source = (Gravity(),),
     )
 
     ode_solver = ClimateMachine.MultirateSolverType(
@@ -93,7 +93,7 @@ function main()
     )
     driver_config = ClimateMachine.AtmosGCMConfiguration(
         "GCM Driver test",
-        N,
+        (N, N),
         resolution,
         setup.domain_height,
         param_set,

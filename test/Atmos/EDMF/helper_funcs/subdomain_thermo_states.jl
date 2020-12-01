@@ -64,16 +64,16 @@ new_thermo_state_en(
 Recover NamedTuple of all thermo states
 """
 function recover_thermo_state_all(bl, state, aux)
-    ts = recover_thermo_state(bl, state, aux)
+    ts = new_thermo_state(bl, state, aux)
     return (
         gm = ts,
-        en = recover_thermo_state_en(bl, bl.moisture, state, aux, ts),
-        up = recover_thermo_state_up(bl, bl.moisture, state, aux, ts),
+        en = new_thermo_state_en(bl, bl.moisture, state, aux, ts),
+        up = new_thermo_state_up(bl, bl.moisture, state, aux, ts),
     )
 end
 
 """
-    recover_thermo_state_up(bl, state, aux)
+    recover_thermo_state_up(bl, state, aux, ts = new_thermo_state(bl, state, aux))
 
 Recover the updraft thermodynamic states given:
  - `bl`, parent `BalanceLaw`
@@ -87,12 +87,24 @@ Recover the updraft thermodynamic states given:
     This method assumes that the temperature has been
     previously computed from a new thermodynamic state
     and stored in `aux`.
+
+!!! warn
+    While recover_thermo_state_up is an ideal long-term solution,
+    right now we are directly calling new_thermo_state_up to avoid
+    inconsistent aux states in kernels where the aux states are
+    out of sync with the boundary state.
 """
-recover_thermo_state_up(bl, state, aux) =
-    recover_thermo_state_up(bl, bl.moisture, state, aux)
+function recover_thermo_state_up(
+    bl,
+    state,
+    aux,
+    ts = new_thermo_state(bl, state, aux),
+)
+    return new_thermo_state_up(bl, bl.moisture, state, aux, ts)
+end
 
 """
-    recover_thermo_state_en(bl, state, aux)
+    recover_thermo_state_en(bl, state, aux, ts = recover_thermo_state(bl, state, aux))
 
 Recover the environment thermodynamic state given:
  - `bl`, parent `BalanceLaw`
@@ -106,13 +118,47 @@ Recover the environment thermodynamic state given:
     This method assumes that the temperature has been
     previously computed from a new thermodynamic state
     and stored in `aux`.
+
+!!! warn
+    While recover_thermo_state_up is an ideal long-term solution,
+    right now we are directly calling new_thermo_state_up to avoid
+    inconsistent aux states in kernels where the aux states are
+    out of sync with the boundary state.
 """
-recover_thermo_state_en(bl, state, aux) =
-    recover_thermo_state_en(bl, bl.moisture, state, aux)
+function recover_thermo_state_en(
+    bl,
+    state,
+    aux,
+    ts = new_thermo_state(bl, state, aux),
+)
+    return new_thermo_state_en(bl, bl.moisture, state, aux, ts)
+end
 
 ####
 #### Implementation
 ####
+
+function new_thermo_state_up(
+    m::AtmosModel,
+    moist::DryModel,
+    state::Vars,
+    aux::Vars,
+    ts::ThermodynamicState,
+)
+    N_up = n_updrafts(m.turbconv)
+    up = state.turbconv.updraft
+    p = air_pressure(ts)
+
+    # compute thermo state for updrafts
+    ts_up = vuntuple(N_up) do i
+        ρa_up = up[i].ρa
+        ρaθ_liq_up = up[i].ρaθ_liq
+        θ_liq_up = ρaθ_liq_up / ρa_up
+
+        PhaseDry_pθ(m.param_set, p, θ_liq_up)
+    end
+    return ts_up
+end
 
 function new_thermo_state_up(
     m::AtmosModel,
@@ -133,14 +179,35 @@ function new_thermo_state_up(
         θ_liq_up = ρaθ_liq_up / ρa_up
         q_tot_up = ρaq_tot_up / ρa_up
 
-        PhaseEquil_pθq(
-            m.param_set,
-            p,
-            θ_liq_up,
-            q_tot_up,
-        )
+        PhaseEquil_pθq(m.param_set, p, θ_liq_up, q_tot_up)
     end
     return ts_up
+end
+
+function new_thermo_state_en(
+    m::AtmosModel,
+    moist::DryModel,
+    state::Vars,
+    aux::Vars,
+    ts::ThermodynamicState,
+)
+    N_up = n_updrafts(m.turbconv)
+    up = state.turbconv.updraft
+
+    # diagnose environment thermo state
+    ρ_inv = 1 / state.ρ
+    p = air_pressure(ts)
+    θ_liq = liquid_ice_pottemp(ts)
+    a_en = environment_area(state, aux, N_up)
+    θ_liq_en = (θ_liq - sum(vuntuple(j -> up[j].ρaθ_liq * ρ_inv, N_up))) / a_en
+    a_min = m.turbconv.subdomains.a_min
+    a_max = m.turbconv.subdomains.a_max
+    if !(0 <= θ_liq_en)
+        @print("θ_liq_en = ", θ_liq_en, "\n")
+        error("Environment θ_liq_en out-of-bounds in new_thermo_state_en")
+    end
+    ts_en = PhaseDry_pθ(m.param_set, p, θ_liq_en)
+    return ts_en
 end
 
 function new_thermo_state_en(
@@ -171,18 +238,13 @@ function new_thermo_state_en(
         @print("q_tot_en = ", q_tot_en, "\n")
         error("Environment q_tot_en out-of-bounds in new_thermo_state_en")
     end
-    ts_en = PhaseEquil_pθq(
-        m.param_set,
-        p,
-        θ_liq_en,
-        q_tot_en,
-    )
+    ts_en = PhaseEquil_pθq(m.param_set, p, θ_liq_en, q_tot_en)
     return ts_en
 end
 
 function recover_thermo_state_up(
     m::AtmosModel,
-    moist::EquilMoist,
+    moist::Union{DryModel, EquilMoist},
     state::Vars,
     aux::Vars,
     ts::ThermodynamicState = recover_thermo_state(m, state, aux),
@@ -196,6 +258,7 @@ end
 
 recover_thermo_state_up_i(m, state, aux, i_up, ts) =
     recover_thermo_state_up_i(m, m.moisture, state, aux, i_up, ts)
+
 function recover_thermo_state_up_i(
     m::AtmosModel,
     moist::EquilMoist,
@@ -223,7 +286,6 @@ function recover_thermo_state_up_i(
         T_up_i,
     )
 end
-
 
 function recover_thermo_state_en(
     m::AtmosModel,

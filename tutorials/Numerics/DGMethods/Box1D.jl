@@ -35,7 +35,7 @@ import ClimateMachine.BalanceLaws:
     update_auxiliary_state!,
     nodal_init_state_auxiliary!,
     init_state_prognostic!,
-    boundary_state!,
+    boundary_conditions,
     wavespeed
 
 ClimateMachine.init(; disable_gpu = true, log_level = "warn");
@@ -74,7 +74,7 @@ function init_state_prognostic!(
     m::Box1D,
     state::Vars,
     aux::Vars,
-    coords,
+    localgeo,
     t::Real,
 )
     if aux.z_dim >= 75 && aux.z_dim <= 125
@@ -128,20 +128,7 @@ end
     d_h_tot,
 ) end
 
-function boundary_state!(
-    nf,
-    m::Box1D,
-    state⁺::Vars,
-    aux⁺::Vars,
-    n⁻,
-    state⁻::Vars,
-    aux⁻::Vars,
-    bctype,
-    t,
-    _...,
-) end;
-
-FT = Float64;
+boundary_condtions(m::Box1D) = ()
 
 function run_box1D(
     N_poly::Int,
@@ -159,7 +146,7 @@ function run_box1D(
     boyd_param_1::Int = 0,
     boyd_param_2::Int = 32,
     numerical_flux_first_order = CentralNumericalFluxFirstOrder(),
-)
+) where {FT}
     N_poly = N_poly
     nelem = 128
     zmax = FT(350)
@@ -198,18 +185,18 @@ function run_box1D(
     output_dir = @__DIR__
     mkpath(output_dir)
 
-    z_key = "z"
     z_label = "z"
     z = get_z(grid)
 
-    all_data = Dict[dict_of_nodal_states(solver_config, [z_key])]  # store initial condition at ``t=0``
+    # store initial condition at ``t=0``
+    all_data = Dict[dict_of_nodal_states(solver_config)]
     time_data = FT[0]                                      # store time data
 
     # output
     output_freq = floor(Int, timeend / dt) + 10
 
     cb_output = GenericCallbacks.EveryXSimulationSteps(output_freq) do
-        push!(all_data, dict_of_nodal_states(solver_config, [z_key]))
+        push!(all_data, dict_of_nodal_states(solver_config))
         push!(time_data, gettime(solver_config.solver))
         nothing
     end
@@ -299,17 +286,17 @@ Mass Conservation:
         (final_mass - initial_mass) / initial_mass
     )
 
-    push!(all_data, dict_of_nodal_states(solver_config, [z_key]))
+    push!(all_data, dict_of_nodal_states(solver_config))
     push!(time_data, gettime(solver_config.solver))
 
     export_plot(
         z,
+        time_data,
         all_data,
         ("q",),
         joinpath(output_dir, plot_name);
         xlabel = "x",
         ylabel = "q",
-        time_data = time_data,
         horiz_layout = true,
     )
 

@@ -28,5 +28,9 @@ export BalanceLaw,
 
 include("state_types.jl")
 include("interface.jl")
+include("boundaryconditions.jl")
+include("tendency_types.jl")
+include("show_tendencies.jl")
+include("sum_tendencies.jl")
 
 end

@@ -35,6 +35,7 @@ import ..BalanceLaws:
     source!,
     transform_post_gradient_laplacian!,
     wavespeed,
+    boundary_conditions,
     boundary_state!,
     update_auxiliary_state!,
     update_auxiliary_state_gradient!,
@@ -56,6 +57,7 @@ export DGModel,
     continuous_field_gradient!,
     courant
 
+include("custom_filter.jl")
 include("NumericalFluxes.jl")
 include("DGModel.jl")
 include("DGModel_kernels.jl")

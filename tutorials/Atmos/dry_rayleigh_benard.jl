@@ -38,8 +38,7 @@ using ClimateMachine.Diagnostics
 using ClimateMachine.GenericCallbacks
 using ClimateMachine.ODESolvers
 using ClimateMachine.Mesh.Filters
-using ClimateMachine.Thermodynamics:
-    PhaseEquil_pTq, internal_energy
+using ClimateMachine.Thermodynamics: PhaseEquil_pTq, internal_energy
 using ClimateMachine.TurbulenceClosures
 using ClimateMachine.VariableTemplates
 
@@ -62,7 +61,9 @@ struct DryRayleighBenardConvectionDataConfig{FT}
 end
 
 # Define initial condition kernel
-function init_problem!(problem, bl, state, aux, (x, y, z), t)
+function init_problem!(problem, bl, state, aux, localgeo, t)
+    (x, y, z) = localgeo.coord
+
     dc = bl.data_config
     FT = eltype(state)
 
@@ -106,7 +107,7 @@ function init_problem!(problem, bl, state, aux, (x, y, z), t)
 end
 
 # Define problem configuration kernel
-function config_problem(FT, N, resolution, xmax, ymax, zmax)
+function config_problem(::Type{FT}, N, resolution, xmax, ymax, zmax) where {FT}
 
     ## Boundary conditions
     T_bot = FT(299)
@@ -136,7 +137,7 @@ function config_problem(FT, N, resolution, xmax, ymax, zmax)
 
     ## Set up the problem
     problem = AtmosProblem(
-        boundarycondition = (
+        boundaryconditions = (
             AtmosBC(
                 momentum = Impenetrable(NoSlip()),
                 energy = PrescribedTemperature((state, aux, t) -> T_bot),
@@ -168,10 +169,14 @@ function config_problem(FT, N, resolution, xmax, ymax, zmax)
         splitting_type = ClimateMachine.SlowFastSplitting(),
         mis_method = MIS2,
         fast_method = LSRK144NiegemannDiehlBusch,
+<<<<<<< HEAD
         nsubsteps = 10,
     )=#
     ode_solver = ClimateMachine.ExplicitSolverType(
         solver_method = LSRK144NiegemannDiehlBusch,
+=======
+        nsubsteps = (40,),
+>>>>>>> 9ce9b2812bdcba5fed011f0ad261edb7edfd9e32
     )
     config = ClimateMachine.AtmosLESConfiguration(
         "DryRayleighBenardConvection",

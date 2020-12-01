@@ -9,6 +9,8 @@ using ClimateMachine.BalanceLaws: number_states
 using ClimateMachine.MPIStateArrays: MPIStateArray
 using ClimateMachine.DGMethods: LocalGeometry, DGModel
 
+import ClimateMachine.Atmos: atmos_source!
+
 import ClimateMachine.BalanceLaws:
     vars_state,
     update_auxiliary_state!,
@@ -332,8 +334,10 @@ function compute_gradient_flux!(
     tc_dif.S² = ∇transform.u[3, 1]^2 + ∇transform.u[3, 2]^2 + en_dif.∇w[3]^2
 end;
 
+struct TurbconvSource <: AbstractSource end
 
-function turbconv_source!(
+function atmos_source!(
+    ::TurbconvSource,
     m::AtmosModel{FT},
     source::Vars,
     state::Vars,
@@ -378,6 +382,7 @@ function turbconv_source!(
     ρa_up = vuntuple(N_up) do i
         gm.ρ * enforce_unit_bounds(up[i].ρa * ρ_inv, a_min, a_max)
     end
+    ρq_tot = m.moisture isa DryModel ? FT(0) : gm.moisture.ρq_tot
 
     @unroll_map(N_up) do i
 
@@ -453,11 +458,11 @@ function turbconv_source!(
             (up[i].ρaq_tot * ρa_up_i_inv - q_tot_en) +
             up[i].ρaw *
             ε_trb[i] *
-            (q_tot_en - gm.moisture.ρq_tot * ρ_inv) *
+            (q_tot_en - ρq_tot * ρ_inv) *
             (q_tot_en - up[i].ρaq_tot * ρa_up_i_inv) +
             up[i].ρaw *
             ε_trb[i] *
-            (q_tot_en - gm.moisture.ρq_tot * ρ_inv) *
+            (q_tot_en - ρq_tot * ρ_inv) *
             (q_tot_en - up[i].ρaq_tot * ρa_up_i_inv) -
             up[i].ρaw * (ε_dyn[i] + ε_trb[i]) * en.ρaq_tot_cv
         )
@@ -473,7 +478,7 @@ function turbconv_source!(
             (q_tot_en - up[i].ρaq_tot * ρa_up_i_inv) +
             up[i].ρaw *
             ε_trb[i] *
-            (q_tot_en - gm.moisture.ρq_tot * ρ_inv) *
+            (q_tot_en - ρq_tot * ρ_inv) *
             (θ_liq_en - up[i].ρaθ_liq * ρa_up_i_inv) -
             up[i].ρaw * (ε_dyn[i] + ε_trb[i]) * en.ρaθ_liq_q_tot_cv
         )
@@ -522,6 +527,8 @@ function flux_first_order!(
     state::Vars,
     aux::Vars,
     t::Real,
+    ts,
+    direction,
 ) where {FT}
     # Aliases:
     gm = state
@@ -626,12 +633,12 @@ function flux_second_order!(
             (gm.ρu[3] * ρ_inv - up[i].ρaw / ρa_up[i])
         end,
     )
-
+    ρq_tot = m.moisture isa DryModel ? FT(0) : gm.moisture.ρq_tot
     massflux_q_tot = sum(
         vuntuple(N_up) do i
             up[i].ρa *
             ρ_inv *
-            (gm.moisture.ρq_tot * ρ_inv - up[i].ρaq_tot / up[i].ρa) *
+            (ρq_tot * ρ_inv - up[i].ρaq_tot / up[i].ρa) *
             (gm.ρu[3] * ρ_inv - up[i].ρaw / ρa_up[i])
         end,
     )
@@ -672,14 +679,13 @@ end;
 # First order boundary conditions
 function turbconv_boundary_state!(
     nf,
-    bc::EDMFBCs,
+    bc::EDMFBottomBC,
     m::AtmosModel{FT},
     state⁺::Vars,
     aux⁺::Vars,
     n⁻,
     state⁻::Vars,
     aux⁻::Vars,
-    bctype,
     t,
     state_int::Vars,
     aux_int::Vars,
@@ -691,41 +697,49 @@ function turbconv_boundary_state!(
     en = state⁺.turbconv.environment
     gm = state⁺
     gm_a = aux⁺
-    if bctype == 1 # bottom
-        zLL = altitude(m, aux_int)
-        a_up_surf,
-        θ_liq_up_surf,
-        q_tot_up_surf,
-        θ_liq_cv,
-        q_tot_cv,
-        θ_liq_q_tot_cv,
-        tke = subdomain_surface_values(
-            turbconv.surface,
-            turbconv,
-            m,
-            gm,
-            gm_a,
-            zLL,
-        )
 
-        @unroll_map(N_up) do i
-            up[i].ρaw = FT(0)
-            up[i].ρa = a_up_surf[i] * gm.ρ
-            up[i].ρaθ_liq = up[i].ρa * θ_liq_up_surf[i]
-            up[i].ρaq_tot = up[i].ρa * q_tot_up_surf[i]
-        end
-        a_en = environment_area(gm, gm_a, N_up)
-        en.ρatke = gm.ρ * a_en * tke
-        en.ρaθ_liq_cv = gm.ρ * a_en * θ_liq_cv
-        en.ρaq_tot_cv = gm.ρ * a_en * q_tot_cv
-        en.ρaθ_liq_q_tot_cv = gm.ρ * a_en * θ_liq_q_tot_cv
+    zLL = altitude(m, aux_int)
+    a_up_surf,
+    θ_liq_up_surf,
+    q_tot_up_surf,
+    θ_liq_cv,
+    q_tot_cv,
+    θ_liq_q_tot_cv,
+    tke = subdomain_surface_values(turbconv.surface, turbconv, m, gm, gm_a, zLL)
+
+    @unroll_map(N_up) do i
+        up[i].ρaw = FT(0)
+        up[i].ρa = a_up_surf[i] * gm.ρ
+        up[i].ρaθ_liq = up[i].ρa * θ_liq_up_surf[i]
+        up[i].ρaq_tot = up[i].ρa * q_tot_up_surf[i]
     end
+    a_en = environment_area(gm, gm_a, N_up)
+    en.ρatke = gm.ρ * a_en * tke
+    en.ρaθ_liq_cv = gm.ρ * a_en * θ_liq_cv
+    en.ρaq_tot_cv = gm.ρ * a_en * q_tot_cv
+    en.ρaθ_liq_q_tot_cv = gm.ρ * a_en * θ_liq_q_tot_cv
 end;
+function turbconv_boundary_state!(
+    nf,
+    bc::EDMFTopBC,
+    m::AtmosModel{FT},
+    state⁺::Vars,
+    aux⁺::Vars,
+    n⁻,
+    state⁻::Vars,
+    aux⁻::Vars,
+    t,
+    state_int::Vars,
+    aux_int::Vars,
+) where {FT}
+    nothing
+end;
+
 
 # The boundary conditions for second-order unknowns
 function turbconv_normal_boundary_flux_second_order!(
     nf,
-    bc::EDMFBCs,
+    bc::EDMFBottomBC,
     m::AtmosModel{FT},
     fluxᵀn::Vars,
     n⁻,
@@ -737,24 +751,41 @@ function turbconv_normal_boundary_flux_second_order!(
     diff⁺::Vars,
     hyperdiff⁺::Vars,
     aux⁺::Vars,
-    bctype,
+    t,
+    _...,
+) where {FT}
+    nothing
+end;
+function turbconv_normal_boundary_flux_second_order!(
+    nf,
+    bc::EDMFTopBC,
+    m::AtmosModel{FT},
+    fluxᵀn::Vars,
+    n⁻,
+    state⁻::Vars,
+    diff⁻::Vars,
+    hyperdiff⁻::Vars,
+    aux⁻::Vars,
+    state⁺::Vars,
+    diff⁺::Vars,
+    hyperdiff⁺::Vars,
+    aux⁺::Vars,
     t,
     _...,
 ) where {FT}
     turbconv = m.turbconv
-    N = n_updrafts(turbconv)
+    N_up = n_updrafts(turbconv)
     up_flx = fluxᵀn.turbconv.updraft
     en_flx = fluxᵀn.turbconv.environment
-    if bctype == 2 # top
-        @unroll_map(N_up) do i
-            up_flx[i].ρaw = -n⁻ * FT(0)
-            up_flx[i].ρa = -n⁻ * FT(0)
-            up_flx[i].ρaθ_liq = -n⁻ * FT(0)
-            up_flx[i].ρaq_tot = -n⁻ * FT(0)
-        end
-        en_flx.∇tke = -n⁻ * FT(0)
-        en_flx.∇e_int_cv = -n⁻ * FT(0)
-        en_flx.∇q_tot_cv = -n⁻ * FT(0)
-        en_flx.∇e_int_q_tot_cv = -n⁻ * FT(0)
-    end
+    # @unroll_map(N_up) do i
+    #     up_flx[i].ρaw = -n⁻ * FT(0)
+    #     up_flx[i].ρa = -n⁻ * FT(0)
+    #     up_flx[i].ρaθ_liq = -n⁻ * FT(0)
+    #     up_flx[i].ρaq_tot = -n⁻ * FT(0)
+    # end
+    # en_flx.∇tke = -n⁻ * FT(0)
+    # en_flx.∇e_int_cv = -n⁻ * FT(0)
+    # en_flx.∇q_tot_cv = -n⁻ * FT(0)
+    # en_flx.∇e_int_q_tot_cv = -n⁻ * FT(0)
+
 end;

@@ -31,7 +31,7 @@ mutable struct LowStorageRungeKutta2N{T, RT, AT, Nstages} <: AbstractODESolver
     "elapsed time steps"
     steps::Int
     "rhs function"
-    rhs!
+    rhs!::Any
     "Storage for RHS during the LowStorageRungeKutta update"
     dQ::AT
     "low storage RK coefficient vector A (rhs scaling)"
@@ -58,6 +58,32 @@ mutable struct LowStorageRungeKutta2N{T, RT, AT, Nstages} <: AbstractODESolver
         fill!(dQ, 0)
 
         new{T, RT, AT, length(RKA)}(RT(dt), RT(t0), 0, rhs!, dQ, RKA, RKB, RKC)
+    end
+end
+
+"""
+    dostep!(Q, lsrk::LowStorageRungeKutta2N, p, time::Real, nsubsteps::Int,
+            iStage::Int, [slow_δ, slow_rv_dQ, slow_scaling])
+
+Wrapper function to use the 2N low storage Runge--Kutta method `lsrk` as the fast
+solver for a Multirate Infinitesimal Step method by calling dostep!(Q,
+lsrk::LowStorageRungeKutta2N, p, time::Real, [slow_δ, slow_rv_dQ, slow_scaling])
+nsubsteps times.
+"""
+function dostep!(
+    Q,
+    lsrk::LowStorageRungeKutta2N,
+    p,
+    time::Real,
+    nsubsteps::Int,
+    iStage::Int,
+    slow_δ = nothing,
+    slow_rv_dQ = nothing,
+    slow_scaling = nothing,
+)
+    for i in 1:nsubsteps
+        dostep!(Q, lsrk, p, time, slow_δ, slow_rv_dQ, slow_scaling)
+        time += lsrk.dt
     end
 end
 
@@ -318,17 +344,7 @@ This uses the fourth-order, 14-stage, low-storage, Runge--Kutta scheme of
 Niegemann, Diehl, and Busch (2012) with optimized stability region
 
 ### References
-
-    @article{niegemann2012efficient,
-      title={Efficient low-storage Runge--Kutta schemes with optimized stability regions},
-      author={Niegemann, Jens and Diehl, Richard and Busch, Kurt},
-      journal={Journal of Computational Physics},
-      volume={231},
-      number={2},
-      pages={364--372},
-      year={2012},
-      publisher={Elsevier}
-    }
+ - [Niegemann2012](@cite)
 """
 function LSRK144NiegemannDiehlBusch(
     F,

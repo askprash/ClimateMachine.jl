@@ -17,10 +17,34 @@ using ..Thermodynamics
         interpol = nothing,
     )
 
-Create and return a `DiagnosticsGroup` containing the
-"AtmosLESDefaultPerturbations" diagnostics for the LES configuration.
-All the diagnostics in the group will run at the specified `interval`,
-and written to files prefixed by `out_prefix` using `writer`.
+Create the "AtmosLESDefaultPerturbations" `DiagnosticsGroup` which
+contains the following diagnostic variables, all of which are
+perturbations from the horizontal average of that variable.
+
+- u_prime
+- v_prime
+- w_prime
+- avg_rho_prime
+- temp_prime
+- pres_prime
+- thd_prime
+- et_prime
+- ei_prime
+- ht_prime
+- hi_prime
+
+When an `EquilMoist` moisture model is used, the following additional
+diagnostic variables are also output:
+
+- qt_prime
+- ql_prime
+- qv_prime
+- thv_prime
+- thl_prime
+
+The perturbations are output on `x`, `y`, `z` dimensions of an
+interpolated grid (`interpol` _must_ be specified) and a (unlimited)
+`time` dimension at the specified `interval`.
 """
 function setup_atmos_default_perturbations(
     ::AtmosLESConfigType,
@@ -260,7 +284,11 @@ function atmos_les_default_perturbations_collect(
     mpirank = MPI.Comm_rank(mpicomm)
     grid = dg.grid
     topology = grid.topology
-    N = polynomialorder(grid)
+    # XXX: Needs updating for multiple polynomial orders
+    N = polynomialorders(grid)
+    # Currently only support single polynomial order
+    @assert all(N[1] .== N)
+    N = N[1]
     Nq = N + 1
     Nqk = dimensionality(grid) == 2 ? 1 : Nq
     npoints = Nq * Nq * Nqk

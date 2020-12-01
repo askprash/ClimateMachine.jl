@@ -14,13 +14,12 @@ function lglpoints(::Type{T}, N::Integer) where {T <: AbstractFloat}
 end
 
 """
-    lgpoints(::Type{T}, N::Integer) where T <: AbstractFloat
+    glpoints(::Type{T}, N::Integer) where T <: AbstractFloat
 
 returns the points `r` and weights `w` associated with the `N+1`-point
 Gauss-Legendre quadrature rule of type `T`
 """
-function lgpoints(::Type{T}, N::Integer) where {T <: AbstractFloat}
-    @assert N ≥ 1
+function glpoints(::Type{T}, N::Integer) where {T <: AbstractFloat}
     GaussQuadrature.legendre(T, N + 1, GaussQuadrature.neither)
 end
 
@@ -30,9 +29,7 @@ end
 returns the barycentric weights associated with the array of points `r`
 
 Reference:
-  Jean-Paul Berrut & Lloyd N. Trefethen, "Barycentric Lagrange Interpolation",
-  SIAM Review 46 (2004), pp. 501-517.
-  <https://doi.org/10.1137/S0036144502417715>
+  [Berrut2004](@cite)
 """
 function baryweights(r::AbstractVector{T}) where {T}
     Np = length(r)
@@ -58,9 +55,7 @@ returns the spectral differentiation matrix for a polynomial defined on the
 points `r` with associated barycentric weights `wb`
 
 Reference:
-  Jean-Paul Berrut & Lloyd N. Trefethen, "Barycentric Lagrange Interpolation",
-  SIAM Review 46 (2004), pp. 501-517.
-  <https://doi.org/10.1137/S0036144502417715>
+ - [Berrut2004](@cite)
 """
 function spectralderivative(
     r::AbstractVector{T},
@@ -94,9 +89,7 @@ returns the polynomial interpolation matrix for interpolating between the points
 `rsrc` (with associated barycentric weights `wbsrc`) and `rdst`
 
 Reference:
-  Jean-Paul Berrut & Lloyd N. Trefethen, "Barycentric Lagrange Interpolation",
-  SIAM Review 46 (2004), pp. 501-517.
-  <https://doi.org/10.1137/S0036144502417715>
+ - [Berrut2004](@cite)
 """
 function interpolationmatrix(
     rsrc::AbstractVector{T},

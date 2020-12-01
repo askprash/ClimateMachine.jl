@@ -17,7 +17,7 @@ function main()
 
     bs = [
         (i == 1) ? (1:0) :
-            BrickMesh.linearpartition(Nelemtotal, i - 1, csize - 1)
+        BrickMesh.linearpartition(Nelemtotal, i - 1, csize - 1)
         for i in 1:csize
     ]
     as = [BrickMesh.linearpartition(Nelemtotal, i, csize) for i in 1:csize]
@@ -27,11 +27,19 @@ function main()
     (so, ss, rs) = BrickMesh.getpartition(comm, codeb)
 
     codeb = codeb[so]
+
+
     codec = []
     for r in 0:(csize - 1)
         sendrange = ss[r + 1]:(ss[r + 2] - 1)
-        rcounts = MPI.Allgather(Cint(length(sendrange)), comm)
-        c = MPI.Gatherv(view(codeb, sendrange), rcounts, r, comm)
+        rcounts = MPI.Gather(Cint(length(sendrange)), r, comm)
+        c = MPI.Gatherv!(
+            view(codeb, sendrange),
+            crank == r ? VBuffer(similar(codeb, sum(rcounts)), rcounts) :
+            nothing,
+            r,
+            comm,
+        )
         if r == crank
             codec = c
         end

@@ -33,11 +33,8 @@ function init_velocity_diffusion!(
     aux::Vars,
     geom::LocalGeometry,
 ) where {n}
-    # No advection
-    aux.u = 0 * n
-
     # diffusion of strength 1 in the n direction
-    aux.D = n * n'
+    aux.diffusion.D = n * n'
 end
 
 # solution is such that
@@ -47,17 +44,18 @@ function initial_condition!(
     ::HeatEqn{n, κ, A},
     state,
     aux,
-    x,
+    localgeo,
     t,
 ) where {n, κ, A}
-    ξn = dot(n, x)
+    ξn = dot(n, localgeo.coord)
     state.ρ = ξn + sum(A .* cos.(κ * ξn) .* exp.(-κ .^ 2 * t))
 end
 Dirichlet_data!(P::HeatEqn, x...) = initial_condition!(P, x...)
 
 function normal_boundary_flux_second_order!(
     ::CentralNumericalFluxSecondOrder,
-    ::AdvectionDiffusion{dim, HeatEqn{nd, κ, A}},
+    bctype,
+    ::AdvectionDiffusion{1, dim, HeatEqn{nd, κ, A}},
     fluxᵀn::Vars{S},
     n⁻,
     state⁻,
@@ -68,7 +66,6 @@ function normal_boundary_flux_second_order!(
     diff⁺,
     hyperdiff⁺,
     aux⁺,
-    bctype,
     t,
     _...,
 ) where {S, dim, nd, κ, A}
@@ -80,12 +77,13 @@ function normal_boundary_flux_second_order!(
         x = aux⁻.coord
         ξn = dot(nd, x)
         ∇ρ = SVector(ntuple(
-            i -> nd[i] * (1 - sum(A .* κ .* sin.(κ * ξn) .* exp.(-κ .^ 2 * t))),
+            i ->
+                nd[i] * (1 - sum(A .* κ .* sin.(κ * ξn) .* exp.(-κ .^ 2 * t))),
             Val(3),
         ))
 
         # Compute flux value
-        D = aux⁻.D
+        D = aux⁻.diffusion.D
         fluxᵀn.ρ = -(D * ∇ρ)' * n⁻
     end
 end
@@ -115,7 +113,7 @@ function test_run(
         DeviceArray = ArrayType,
         polynomialorder = N,
     )
-    model = AdvectionDiffusion{dim}(HeatEqn{n, κ, A}())
+    model = AdvectionDiffusion{dim}(HeatEqn{n, κ, A}(); advection = false)
     dg = DGModel(
         model,
         grid,
@@ -220,7 +218,7 @@ let
     expected_result[2, 2, Float32, VerticalDirection] = 0.0005684843
     expected_result[2, 3, Float32, VerticalDirection] = 1.0227403e-5
     expected_result[3, 1, Float32, EveryDirection] = 0.0012602004
-    expected_result[3, 2, Float32, EveryDirection] = 2.2404534e-5
+    expected_result[3, 2, Float32, EveryDirection] = 2.2415780e-5
     expected_result[3, 3, Float32, EveryDirection] = 1.1309192e-5
     expected_result[3, 1, Float32, HorizontalDirection] = 0.005157044
     expected_result[3, 2, Float32, HorizontalDirection] = 6.66792e-5
@@ -231,26 +229,30 @@ let
 
     @testset "$(@__FILE__)" begin
         for FT in (Float64, Float32)
-            numlevels = integration_testing ||
-            ClimateMachine.Settings.integration_testing ?
+            numlevels =
+                integration_testing ||
+                ClimateMachine.Settings.integration_testing ?
                 3 : 1
             result = zeros(FT, numlevels)
             for dim in 2:3
                 for direction in
                     (EveryDirection, HorizontalDirection, VerticalDirection)
                     if direction <: EveryDirection
-                        n = dim == 2 ?
+                        n =
+                            dim == 2 ?
                             SVector{3, FT}(1 / sqrt(2), 1 / sqrt(2), 0) :
                             SVector{3, FT}(
-                            1 / sqrt(3),
-                            1 / sqrt(3),
-                            1 / sqrt(3),
-                        )
+                                1 / sqrt(3),
+                                1 / sqrt(3),
+                                1 / sqrt(3),
+                            )
                     elseif direction <: HorizontalDirection
-                        n = dim == 2 ? SVector{3, FT}(1, 0, 0) :
+                        n =
+                            dim == 2 ? SVector{3, FT}(1, 0, 0) :
                             SVector{3, FT}(1 / sqrt(2), 1 / sqrt(2), 0)
                     elseif direction <: VerticalDirection
-                        n = dim == 2 ? SVector{3, FT}(0, 1, 0) :
+                        n =
+                            dim == 2 ? SVector{3, FT}(0, 1, 0) :
                             SVector{3, FT}(0, 0, 1)
                     end
                     for l in 1:numlevels

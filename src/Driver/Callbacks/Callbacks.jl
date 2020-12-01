@@ -31,7 +31,7 @@ _sync_device(::Type{Array}) = nothing
 """
     SummaryLogCallback([stimeend])
 
-Log a summary of the current run. 
+Log a summary of the current run.
 
 The optional `stimeend` argument is used to print the total simulation time.
 """
@@ -48,8 +48,9 @@ function GenericCallbacks.init!(cb::SummaryLogCallback, solver, Q, param, t)
     return nothing
 end
 function GenericCallbacks.call!(cb::SummaryLogCallback, solver, Q, param, t)
-    runtime = Dates.format(
-        convert(Dates.DateTime, Dates.now() - cb.wtimestart),
+    wallclock_time_ms = Dates.now() - cb.wtimestart
+    wallclock = Dates.format(
+        convert(Dates.DateTime, wallclock_time_ms),
         Dates.dateformat"HH:MM:SS",
     )
     normQ = norm(Q)
@@ -58,14 +59,30 @@ function GenericCallbacks.call!(cb::SummaryLogCallback, solver, Q, param, t)
     else
         simtime = @sprintf "%8.2f / %8.2f" t cb.stimeend
     end
+    wallclock_s = wallclock_time_ms.value / 1000
+    efficiency = @sprintf "%8.4f" t / wallclock_s
+
+    estimated_wallclock_end = cb.stimeend * wallclock_s / t
+
+    estimated_wallclock_end_ms =
+        Dates.Millisecond(ceil(Int, estimated_wallclock_end * 1000))
+
+    estimated_remaining = Dates.format(
+        convert(Dates.DateTime, estimated_wallclock_end_ms),
+        Dates.dateformat"HH:MM:SS",
+    )
     @info @sprintf(
         """
         Update
             simtime = %s
-            runtime = %s
+            wallclock = %s
+            efficiency (simtime / wallclock) = %s
+            wallclock end (estimated) = %s
             norm(Q) = %.16e""",
         simtime,
-        runtime,
+        wallclock,
+        efficiency,
+        estimated_remaining,
         normQ,
     )
     isnan(normQ) && error("norm(Q) is NaN")

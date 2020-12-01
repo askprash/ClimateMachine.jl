@@ -4,6 +4,7 @@ export ThermodynamicState,
     PhaseDry,
     PhaseDry_ρT,
     PhaseDry_pT,
+    PhaseDry_ρθ,
     PhaseDry_pθ,
     PhaseEquil,
     PhaseEquil_ρTq,
@@ -101,6 +102,21 @@ Constructs a [`PhaseDry`](@ref) thermodynamic state from:
 function PhaseDry_pT(param_set::APS, p::FT, T::FT) where {FT <: Real}
     e_int = internal_energy(param_set, T)
     ρ = air_density(param_set, T, p)
+    return PhaseDry{FT, typeof(param_set)}(param_set, e_int, ρ)
+end
+
+"""
+    PhaseDry_ρθ(param_set, ρ, θ_dry)
+
+Constructs a [`PhaseDry`](@ref) thermodynamic state from:
+
+ - `param_set` an `AbstractParameterSet`, see the [`Thermodynamics`](@ref) for more details
+ - `ρ` density
+ - `θ_dry` dry potential temperature
+"""
+function PhaseDry_ρθ(param_set::APS, ρ::FT, θ_dry::FT) where {FT <: Real}
+    T = air_temperature_given_θρq(param_set, θ_dry, ρ)
+    e_int = internal_energy(param_set, T)
     return PhaseDry{FT, typeof(param_set)}(param_set, e_int, ρ)
 end
 
@@ -224,10 +240,10 @@ function PhaseEquil_ρθq(
 ) where {FT <: Real}
     phase_type = PhaseEquil
     tol = ResidualTolerance(temperature_tol)
-    T = saturation_adjustment_q_tot_θ_liq_ice(
+    T = saturation_adjustment_given_ρθq(
         param_set,
-        θ_liq_ice,
         ρ,
+        θ_liq_ice,
         q_tot,
         phase_type,
         maxiter,
@@ -260,10 +276,10 @@ function PhaseEquil_pθq(
 ) where {FT <: Real}
     phase_type = PhaseEquil
     tol = ResidualTolerance(temperature_tol)
-    T = saturation_adjustment_q_tot_θ_liq_ice_given_pressure(
+    T = saturation_adjustment_given_pθq(
         param_set,
-        θ_liq_ice,
         p,
+        θ_liq_ice,
         q_tot,
         phase_type,
         maxiter,
@@ -401,7 +417,7 @@ function PhaseNonEquil_ρθq(
 ) where {FT <: Real}
     phase_type = PhaseNonEquil
     tol = ResidualTolerance(potential_temperature_tol)
-    T = air_temperature_from_liquid_ice_pottemp_non_linear(
+    T = air_temperature_given_θρq_nonlinear(
         param_set,
         θ_liq_ice,
         ρ,
@@ -429,12 +445,7 @@ function PhaseNonEquil_pθq(
     θ_liq_ice::FT,
     q_pt::PhasePartition{FT},
 ) where {FT <: Real}
-    T = air_temperature_from_liquid_ice_pottemp_given_pressure(
-        param_set,
-        θ_liq_ice,
-        p,
-        q_pt,
-    )
+    T = air_temperature_given_θpq(param_set, θ_liq_ice, p, q_pt)
     ρ = air_density(param_set, T, p, q_pt)
     e_int = internal_energy(param_set, T, q_pt)
     return PhaseNonEquil{FT, typeof(param_set)}(param_set, e_int, ρ, q_pt)

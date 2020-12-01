@@ -152,8 +152,10 @@ mutable struct MPIStateArray{
         # Make sure that we have finished all outstanding data for halo
         # exchanges before the MPIStateArray is finalize.
         finalizer(Q) do x
-            MPI.Waitall!(x.recvreq)
-            MPI.Waitall!(x.sendreq)
+            if !MPI.Finalized()
+                MPI.Waitall!(x.recvreq)
+                MPI.Waitall!(x.sendreq)
+            end
         end
         return Q
     end
@@ -278,7 +280,7 @@ function Base.similar(
     ::Type{A},
     ::Type{FT};
     vars::Type{V} = vars(Q),
-    nstate = size(Q.data)[2]
+    nstate = size(Q.data)[2],
 ) where {A <: AbstractArray, FT <: Number, V}
     MPIStateArray{FT, V}(
         Q.mpicomm,
@@ -300,7 +302,7 @@ function Base.similar(
     Q::MPIStateArray{FT},
     ::Type{A};
     vars::Type{V} = vars(Q),
-    nstate = size(Q.data)[2]
+    nstate = size(Q.data)[2],
 ) where {A <: AbstractArray, FT <: Number, V}
     similar(Q, A, FT; vars = V, nstate = nstate)
 end
@@ -308,14 +310,14 @@ function Base.similar(
     Q::MPIStateArray,
     ::Type{FT};
     vars::Type{V} = vars(Q),
-    nstate = size(Q.data)[2]
+    nstate = size(Q.data)[2],
 ) where {FT <: Number, V}
     similar(Q, typeof(Q.data), FT; vars = V, nstate = nstate)
 end
 function Base.similar(
     Q::MPIStateArray{FT};
     vars::Type{V} = vars(Q),
-    nstate = size(Q.data)[2]
+    nstate = size(Q.data)[2],
 ) where {FT, V}
     similar(Q, FT; vars = V, nstate = nstate)
 end

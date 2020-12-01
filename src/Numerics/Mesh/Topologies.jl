@@ -14,6 +14,8 @@ export AbstractTopology,
 
 export grid1d, SingleExponentialStretching, InteriorStretching
 
+export basic_topology_info
+
 """
     AbstractTopology{dim}
 
@@ -235,15 +237,17 @@ end
 Base.getproperty(a::CubedShellTopology, p::Symbol) =
     getproperty(getfield(a, :topology), p)
 
+abstract type AbstractStackedTopology{dim} <: AbstractTopology{dim} end
+
 
 """
-    StackedBrickTopology{dim, T} <: AbstractTopology{dim}
+    StackedBrickTopology{dim, T} <: AbstractStackedTopology{dim}
 
 A simple grid-based topology, where all elements on the trailing dimension are
 stacked to be contiguous. This is a convenience wrapper around
 [`BoxElementTopology`](@ref).
 """
-struct StackedBrickTopology{dim, T} <: AbstractTopology{dim}
+struct StackedBrickTopology{dim, T} <: AbstractStackedTopology{dim}
     topology::BoxElementTopology{dim, T}
     stacksize::Int64
 end
@@ -253,13 +257,13 @@ function Base.getproperty(a::StackedBrickTopology, p::Symbol)
 end
 
 """
-    StackedCubedSphereTopology{3, T} <: AbstractTopology{3}
+    StackedCubedSphereTopology{3, T} <: AbstractStackedTopology{3}
 
 A cube-sphere topology. All elements on the same "vertical" dimension are
 stacked to be contiguous. This is a convenience wrapper around
 [`BoxElementTopology`](@ref).
 """
-struct StackedCubedSphereTopology{T} <: AbstractTopology{3}
+struct StackedCubedSphereTopology{T} <: AbstractStackedTopology{3}
     topology::BoxElementTopology{3, T}
     stacksize::Int64
 end
@@ -918,22 +922,7 @@ end
 
 Given points `(a, b, c)` on the surface of a cube, warp the points out to a
 spherical shell of radius `R` based on the equiangular gnomonic grid proposed by
-Ronchi, Iacono, Paolucci (1996) https://linkinghub.elsevier.com/retrieve/pii/S0021999196900479
-
-```
-@article{RonchiIaconoPaolucci1996,
-  title={The ``cubed sphere'': a new method for the solution of partial
-         differential equations in spherical geometry},
-  author={Ronchi, C. and Iacono, R. and Paolucci, P. S.},
-  journal={Journal of Computational Physics},
-  volume={124},
-  number={1},
-  pages={93--114},
-  year={1996},
-  doi={10.1006/jcph.1996.0047}
-}
-```
-
+[Ronchi1996](@cite)
 """
 function cubedshellwarp(a, b, c, R = max(abs(a), abs(b), abs(c)))
 
@@ -1247,7 +1236,7 @@ Returns either a range object or a vector containing the element boundaries.
 """
 function grid1d(a, b, stretch = nothing; elemsize = nothing, nelem = nothing)
     xor(nelem === nothing, elemsize === nothing) ||
-    error("Either `elemsize` or `nelem` arguments must be provided")
+        error("Either `elemsize` or `nelem` arguments must be provided")
     if elemsize !== nothing
         nelem = round(Int, abs(b - a) / elemsize)
     end
@@ -1293,6 +1282,29 @@ function grid1d(a::A, b::B, stretch::InteriorStretching, nelem) where {A, B}
     s = range(zero(F), stop = one(F), length = nelem + 1)
     range(a, stop = b, length = nelem + 1) .+
     coe .* (stretch.attractor .- (b - a) .* s) .* (1 .- s) .* s
+end
+
+function basic_topology_info(topology::AbstractStackedTopology)
+    nelem = length(topology.elems)
+    nvertelem = topology.stacksize
+    nhorzelem = div(nelem, nvertelem)
+    nrealelem = length(topology.realelems)
+    nhorzrealelem = div(nrealelem, nvertelem)
+
+    return (
+        nelem = nelem,
+        nvertelem = nvertelem,
+        nhorzelem = nhorzelem,
+        nrealelem = nrealelem,
+        nhorzrealelem = nhorzrealelem,
+    )
+end
+
+function basic_topology_info(topology::AbstractTopology)
+    return (
+        nelem = length(topology.elems),
+        nrealelem = length(topology.realelems),
+    )
 end
 
 end

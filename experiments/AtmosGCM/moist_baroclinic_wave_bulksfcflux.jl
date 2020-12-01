@@ -40,7 +40,7 @@ CLIMAParameters.Planet.press_triple(::EarthParameterSet) = 610.78
 # driver-specific parameters added here
 T_sfc_pole(::EarthParameterSet) = 271.0
 
-function init_baroclinic_wave!(problem, bl, state, aux, coords, t)
+function init_baroclinic_wave!(problem, bl, state, aux, localgeo, t)
     FT = eltype(state)
 
     # parameters
@@ -239,11 +239,11 @@ function config_baroclinic_wave(
     _C_drag = C_drag(param_set)::FT
     bulk_flux = Varying_SST_TJ16(param_set, SphericalOrientation(), moisture)
     problem = AtmosProblem(
-        boundarycondition = (
+        boundaryconditions = (
             AtmosBC(
                 energy = BulkFormulaEnergy(
-                    (state, aux, t, normPu_int) -> _C_drag,
-                    (state, aux, t) -> bulk_flux(state, aux, t),
+                    (bl, state, aux, t, normPu_int) -> _C_drag,
+                    (bl, state, aux, t) -> bulk_flux(state, aux, t),
                 ),
                 moisture = BulkFormulaMoisture(
                     (state, aux, t, normPu_int) -> _C_drag,
@@ -307,9 +307,9 @@ function main()
 
     # Driver configuration parameters
     FT = Float64                             # floating type precision
-    poly_order = 3                           # discontinuous Galerkin polynomial order
-    n_horz = 12                              # horizontal element number
-    n_vert = 6                               # vertical element number
+    poly_order = 5                           # discontinuous Galerkin polynomial order
+    n_horz = 8                              # horizontal element number
+    n_vert = 4                               # vertical element number
     n_days::FT = 1
     timestart::FT = 0                        # start time (s)
     timeend::FT = n_days * day(param_set)    # end time (s)

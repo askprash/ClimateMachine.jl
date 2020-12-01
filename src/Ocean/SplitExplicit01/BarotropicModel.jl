@@ -12,8 +12,14 @@ function vars_state(m::BarotropicModel, ::Prognostic, T)
     end
 end
 
-function init_state_prognostic!(m::BarotropicModel, Q::Vars, A::Vars, coords, t)
-    return ocean_init_state!(m, m.baroclinic.problem, Q, A, coords, t)
+function init_state_prognostic!(
+    m::BarotropicModel,
+    Q::Vars,
+    A::Vars,
+    localgeo,
+    t,
+)
+    return ocean_init_state!(m, m.baroclinic.problem, Q, A, localgeo, t)
 end
 
 function vars_state(m::BarotropicModel, ::Auxiliary, T)
@@ -172,13 +178,13 @@ function update_penalty!(
     return nothing
 end
 
-@inline function boundary_state!(nf, bm::BarotropicModel, args...)
-    # hack for handling multiple boundaries for now
-    # will fix with a future update
-    boundary_conditions = (
-        bm.baroclinic.problem.boundary_conditions[1],
-        bm.baroclinic.problem.boundary_conditions[1],
-        bm.baroclinic.problem.boundary_conditions[1],
-    )
-    return ocean_boundary_state!(nf, boundary_conditions, bm, args...)
+# hack for handling multiple boundaries for now
+# will fix with a future update
+boundary_conditions(bm::BarotropicModel) = (
+    bm.baroclinic.problem.boundary_conditions[1],
+    bm.baroclinic.problem.boundary_conditions[1],
+    bm.baroclinic.problem.boundary_conditions[1],
+)
+@inline function boundary_state!(nf, bc, bm::BarotropicModel, args...)
+    return _ocean_boundary_state!(nf, bc, bm, args...)
 end

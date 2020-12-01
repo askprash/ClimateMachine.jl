@@ -9,8 +9,6 @@
 # `src/Driver/solver_configs.jl` while the `AtmosModel` defaults can be found in
 # `src/Atmos/Model/AtmosModel.jl` and `src/Driver/driver_configs.jl`
 #
-# This setup works in both Float32 and Float64 precision. `FT`
-#
 # To simulate the full 6 hour experiment, change `timeend` to (3600*6) and type in
 #
 # julia --project experiments/AtmosLES/bomex.jl
@@ -24,29 +22,7 @@
 # 3) Collapsed experiment design
 # 4) Updates to generally keep this in sync with master
 
-@article{doi:10.1175/1520-0469(2003)60<1201:ALESIS>2.0.CO;2,
-author = {Siebesma, A. Pier and Bretherton,
-          Christopher S. and Brown,
-          Andrew and Chlond,
-          Andreas and Cuxart,
-          Joan and Duynkerke,
-          Peter G. and Jiang,
-          Hongli and Khairoutdinov,
-          Marat and Lewellen,
-          David and Moeng,
-          Chin-Hoh and Sanchez,
-          Enrique and Stevens,
-          Bjorn and Stevens,
-          David E.},
-title = {A Large Eddy Simulation Intercomparison Study of Shallow Cumulus Convection},
-journal = {Journal of the Atmospheric Sciences},
-volume = {60},
-number = {10},
-pages = {1201-1219},
-year = {2003},
-doi = {10.1175/1520-0469(2003)60<1201:ALESIS>2.0.CO;2},
-URL = {https://journals.ametsoc.org/doi/abs/10.1175/1520-0469%282003%2960%3C1201%3AALESIS%3E2.0.CO%3B2},
-eprint = {https://journals.ametsoc.org/doi/pdf/10.1175/1520-0469%282003%2960%3C1201%3AALESIS%3E2.0.CO%3B2}
+[Siebesma2003](@cite)
 =#
 
 using ArgParse
@@ -101,7 +77,7 @@ using ClimateMachine.Atmos: altitude, recover_thermo_state
 """
   Bomex Geostrophic Forcing (Source)
 """
-struct BomexGeostrophic{FT} <: Source
+struct BomexGeostrophic{FT} <: AbstractSource
     "Coriolis parameter [s⁻¹]"
     f_coriolis::FT
     "Eastward geostrophic velocity `[m/s]` (Base)"
@@ -140,7 +116,7 @@ end
 """
   Bomex Sponge (Source)
 """
-struct BomexSponge{FT} <: Source
+struct BomexSponge{FT} <: AbstractSource
     "Maximum domain altitude (m)"
     z_max::FT
     "Altitude at with sponge starts (m)"
@@ -191,7 +167,7 @@ end
   BomexTendencies (Source)
 Moisture, Temperature and Subsidence tendencies
 """
-struct BomexTendencies{FT} <: Source
+struct BomexTendencies{FT} <: AbstractSource
     "Advection tendency in total moisture `[s⁻¹]`"
     ∂qt∂t_peak::FT
     "Lower extent of piecewise profile (moisture term) `[m]`"
@@ -278,17 +254,20 @@ function atmos_source!(
     end
 
     # Collect Sources
-    source.moisture.ρq_tot += ρ∂qt∂t
     source.ρe += cvm * ρ∂θ∂t * exner(TS) + _e_int_v0 * ρ∂qt∂t
     source.ρe -= ρ * w_s * dot(k̂, diffusive.∇h_tot)
+    source.moisture.ρq_tot += ρ∂qt∂t
     source.moisture.ρq_tot -= ρ * w_s * dot(k̂, diffusive.moisture.∇q_tot)
+    source.ρ += ρ∂qt∂t
+    source.ρ -= ρ * w_s * dot(k̂, diffusive.moisture.∇q_tot)
     return nothing
 end
 
 """
   Initial Condition for BOMEX LES
 """
-function init_bomex!(problem, bl, state, aux, (x, y, z), t)
+function init_bomex!(problem, bl, state, aux, localgeo, t)
+    (x, y, z) = localgeo.coord
     # This experiment runs the BOMEX LES Configuration
     # (Shallow cumulus cloud regime)
     # x,y,z imply eastward, northward and altitude coordinates in `[m]`
@@ -382,7 +361,7 @@ function init_bomex!(problem, bl, state, aux, (x, y, z), t)
         state.ρe += rand() * ρe_tot / 100
         state.moisture.ρq_tot += rand() * ρ * q_tot / 100
     end
-    init_state_prognostic!(bl.turbconv, bl, state, aux, (x, y, z), t)
+    init_state_prognostic!(bl.turbconv, bl, state, aux, localgeo, t)
 end
 
 function bomex_model(
@@ -455,15 +434,16 @@ function bomex_model(
         source = source_default
         moisture = EquilMoist{FT}(; maxiter = 5, tolerance = FT(0.1))
     elseif moisture_model == "nonequilibrium"
-        source = (source_default..., CreateClouds())
+        source = (source_default..., CreateClouds()...)
         moisture = NonEquilMoist()
     else
         @warn @sprintf(
             """
-%s: unrecognized moisture_model in source terms, using the defaults""",
+%s: unrecognized moisture_model, using the defaults""",
             moisture_model,
         )
         source = source_default
+        moisture = EquilMoist{FT}(; maxiter = 5, tolerance = FT(0.1))
     end
 
     # Set up problem initial and boundary conditions
@@ -472,8 +452,8 @@ function bomex_model(
         moisture_bc = PrescribedMoistureFlux((state, aux, t) -> moisture_flux)
     elseif surface_flux == "bulk"
         energy_bc = BulkFormulaEnergy(
-            (state, aux, t, normPu_int) -> C_drag,
-            (state, aux, t) -> (T_sfc, q_sfc),
+            (bl, state, aux, t, normPu_int) -> C_drag,
+            (bl, state, aux, t) -> (T_sfc, q_sfc),
         )
         moisture_bc = BulkFormulaMoisture(
             (state, aux, t, normPu_int) -> C_drag,
@@ -488,7 +468,7 @@ function bomex_model(
     end
 
     problem = AtmosProblem(
-        boundarycondition = (
+        boundaryconditions = (
             AtmosBC(
                 momentum = Impenetrable(DragLaw(
                     # normPu_int is the internal horizontal speed
@@ -497,9 +477,9 @@ function bomex_model(
                 )),
                 energy = energy_bc,
                 moisture = moisture_bc,
-                turbconv = turbconv_bcs(turbconv),
+                turbconv = turbconv_bcs(turbconv)[1],
             ),
-            AtmosBC(),
+            AtmosBC(turbconv = turbconv_bcs(turbconv)[2]),
         ),
         init_state_prognostic = ics,
     )

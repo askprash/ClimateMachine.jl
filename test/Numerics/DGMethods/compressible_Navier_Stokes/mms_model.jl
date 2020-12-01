@@ -10,6 +10,7 @@ import ClimateMachine.BalanceLaws:
     flux_second_order!,
     source!,
     wavespeed,
+    boundary_conditions,
     boundary_state!,
     compute_gradient_argument!,
     compute_gradient_flux!,
@@ -147,26 +148,36 @@ function wavespeed(::MMSModel, nM, state::Vars, aux::Vars, t::Real, direction)
     return abs(nM[1] * u + nM[2] * v + nM[3] * w) + sqrt(ρinv * γ * P)
 end
 
+boundary_conditions(::MMSModel) = (nothing,)
+
 function boundary_state!(
     ::RusanovNumericalFlux,
+    bctype,
     bl::MMSModel,
     stateP::Vars,
     auxP::Vars,
     nM,
     stateM::Vars,
     auxM::Vars,
-    bctype,
     t,
     _...,
 )
-    init_state_prognostic!(bl, stateP, auxP, (auxM.x1, auxM.x2, auxM.x3), t)
+    init_state_prognostic!(
+        bl,
+        stateP,
+        auxP,
+        (coord = (auxM.x1, auxM.x2, auxM.x3),),
+        t,
+    )
 end
 
 # FIXME: This is probably not right....
-boundary_state!(::CentralNumericalFluxGradient, bl::MMSModel, _...) = nothing
+boundary_state!(::CentralNumericalFluxGradient, bc, bl::MMSModel, _...) =
+    nothing
 
 function boundary_state!(
     ::CentralNumericalFluxSecondOrder,
+    bctype,
     bl::MMSModel,
     stateP::Vars,
     diffP::Vars,
@@ -175,11 +186,16 @@ function boundary_state!(
     stateM::Vars,
     diffM::Vars,
     auxM::Vars,
-    bctype,
     t,
     _...,
 )
-    init_state_prognostic!(bl, stateP, auxP, (auxM.x1, auxM.x2, auxM.x3), t)
+    init_state_prognostic!(
+        bl,
+        stateP,
+        auxP,
+        (coord = (auxM.x1, auxM.x2, auxM.x3),),
+        t,
+    )
 end
 
 function nodal_init_state_auxiliary!(
@@ -198,9 +214,10 @@ function init_state_prognostic!(
     bl::MMSModel{dim},
     state::Vars,
     aux::Vars,
-    (x1, x2, x3),
+    localgeo,
     t,
 ) where {dim}
+    (x1, x2, x3) = localgeo.coord
     state.ρ = ρ_g(t, x1, x2, x3, Val(dim))
     state.ρu = U_g(t, x1, x2, x3, Val(dim))
     state.ρv = V_g(t, x1, x2, x3, Val(dim))

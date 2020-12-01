@@ -5,6 +5,7 @@
 # - AtmosLESConfiguration
 # - AtmosGCMConfiguration
 # - OceanBoxGCMConfiguration
+# - OceanSplitExplicitConfiguration
 # - SingleStackConfiguration
 #
 # User-customized configurations can use these as templates.
@@ -38,8 +39,9 @@ struct DriverConfiguration{FT}
     config_type::ClimateMachineConfigType
 
     name::String
-    N::Int
-    array_type
+    # polynomial order tuple (polyorder_horz, polyorder_vert)
+    polyorders::NTuple{2, Int}
+    array_type::Any
     solver_type::AbstractSolverType
     #
     # Model details
@@ -63,7 +65,7 @@ struct DriverConfiguration{FT}
     function DriverConfiguration(
         config_type,
         name::String,
-        N::Int,
+        polyorders::NTuple{2, Int},
         FT,
         array_type,
         solver_type::AbstractSolverType,
@@ -76,10 +78,12 @@ struct DriverConfiguration{FT}
         numerical_flux_gradient::NumericalFluxGradient,
         config_info::ConfigSpecificInfo,
     )
+        # FIXME: Once variable degree kernels are merged, remove this assert
+        @assert polyorders[1] == polyorders[2]
         return new{FT}(
             config_type,
             name,
-            N,
+            polyorders,
             array_type,
             solver_type,
             param_set,
@@ -105,11 +109,12 @@ function print_model_info(model)
             )
     end
     @info msg
+    show_tendencies(model)
 end
 
 function AtmosLESConfiguration(
     name::String,
-    N::Int,
+    N::Union{Int, NTuple{2, Int}},
     (Δx, Δy, Δz)::NTuple{3, FT},
     xmax::FT,
     ymax::FT,
@@ -138,12 +143,14 @@ function AtmosLESConfiguration(
     numerical_flux_gradient = CentralNumericalFluxGradient(),
 ) where {FT <: AbstractFloat}
 
+    (polyorder_horz, polyorder_vert) = isa(N, Int) ? (N, N) : N
+
     print_model_info(model)
 
     brickrange = (
-        grid1d(xmin, xmax, elemsize = Δx * N),
-        grid1d(ymin, ymax, elemsize = Δy * N),
-        grid1d(zmin, zmax, elemsize = Δz * N),
+        grid1d(xmin, xmax, elemsize = Δx * polyorder_horz),
+        grid1d(ymin, ymax, elemsize = Δy * polyorder_horz),
+        grid1d(zmin, zmax, elemsize = Δz * polyorder_vert),
     )
     topology = StackedBrickTopology(
         mpicomm,
@@ -156,23 +163,25 @@ function AtmosLESConfiguration(
         topology,
         FloatType = FT,
         DeviceArray = array_type,
-        polynomialorder = N,
+        polynomialorder = (polyorder_horz, polyorder_vert),
         meshwarp = meshwarp,
     )
 
     @info @sprintf(
         """
 Establishing Atmos LES configuration for %s
-    precision        = %s
-    polynomial order = %d
-    domain           = %.2f m x%.2f m x%.2f m
-    resolution       = %dx%dx%d
-    MPI ranks        = %d
-    min(Δ_horz)      = %.2f m
-    min(Δ_vert)      = %.2f m""",
+    precision              = %s
+    horiz polynomial order = %d
+    vert polynomial order  = %d
+    domain                 = %.2f m x%.2f m x%.2f m
+    resolution             = %dx%dx%d
+    MPI ranks              = %d
+    min(Δ_horz)            = %.2f m
+    min(Δ_vert)            = %.2f m""",
         name,
         FT,
-        N,
+        polyorder_horz,
+        polyorder_vert,
         xmax,
         ymax,
         zmax,
@@ -187,7 +196,7 @@ Establishing Atmos LES configuration for %s
     return DriverConfiguration(
         AtmosLESConfigType(),
         name,
-        N,
+        (polyorder_horz, polyorder_vert),
         FT,
         array_type,
         solver_type,
@@ -204,7 +213,7 @@ end
 
 function AtmosGCMConfiguration(
     name::String,
-    N::Int,
+    N::Union{Int, NTuple{2, Int}},
     (nelem_horz, nelem_vert)::NTuple{2, Int},
     domain_height::FT,
     param_set::AbstractParameterSet,
@@ -222,6 +231,8 @@ function AtmosGCMConfiguration(
     numerical_flux_second_order = CentralNumericalFluxSecondOrder(),
     numerical_flux_gradient = CentralNumericalFluxGradient(),
 ) where {FT <: AbstractFloat}
+
+    (polyorder_horz, polyorder_vert) = isa(N, Int) ? (N, N) : N
 
     print_model_info(model)
 
@@ -243,24 +254,26 @@ function AtmosGCMConfiguration(
         topology,
         FloatType = FT,
         DeviceArray = array_type,
-        polynomialorder = N,
+        polynomialorder = (polyorder_horz, polyorder_vert),
         meshwarp = meshwarp,
     )
 
     @info @sprintf(
         """
 Establishing Atmos GCM configuration for %s
-    precision        = %s
-    polynomial order = %d
-    #horiz elems     = %d
-    #vert elems      = %d
-    domain height    = %.2e m
-    MPI ranks        = %d
-    min(Δ_horz)      = %.2f m
-    min(Δ_vert)      = %.2f m""",
+    precision              = %s
+    horiz polynomial order = %d
+    vert polynomial order  = %d
+    # horiz elem           = %d
+    # vert elems           = %d
+    domain height          = %.2e m
+    MPI ranks              = %d
+    min(Δ_horz)            = %.2f m
+    min(Δ_vert)            = %.2f m""",
         name,
         FT,
-        N,
+        polyorder_horz,
+        polyorder_vert,
         nelem_horz,
         nelem_vert,
         domain_height,
@@ -272,7 +285,7 @@ Establishing Atmos GCM configuration for %s
     return DriverConfiguration(
         AtmosGCMConfigType(),
         name,
-        N,
+        (polyorder_horz, polyorder_vert),
         FT,
         array_type,
         solver_type,
@@ -289,7 +302,7 @@ end
 
 function OceanBoxGCMConfiguration(
     name::String,
-    N::Int,
+    N::Union{Int, NTuple{2, Int}},
     (Nˣ, Nʸ, Nᶻ)::NTuple{3, Int},
     param_set::AbstractParameterSet,
     model::HydrostaticBoussinesqModel;
@@ -305,6 +318,8 @@ function OceanBoxGCMConfiguration(
     periodicity = (false, false, false),
     boundary = ((1, 1), (1, 1), (2, 3)),
 )
+
+    (polyorder_horz, polyorder_vert) = isa(N, Int) ? (N, N) : N
 
     brickrange = (
         range(FT(0); length = Nˣ + 1, stop = model.problem.Lˣ),
@@ -323,13 +338,13 @@ function OceanBoxGCMConfiguration(
         topology,
         FloatType = FT,
         DeviceArray = array_type,
-        polynomialorder = N,
+        polynomialorder = (polyorder_horz, polyorder_vert),
     )
 
     return DriverConfiguration(
         OceanBoxGCMConfigType(),
         name,
-        N,
+        (polyorder_horz, polyorder_vert),
         FT,
         array_type,
         solver_type,
@@ -346,7 +361,7 @@ end
 
 function OceanSplitExplicitConfiguration(
     name::String,
-    N::Int,
+    N::Union{Int, NTuple{2, Int}},
     (Nˣ, Nʸ, Nᶻ)::NTuple{3, Int},
     param_set::AbstractParameterSet,
     model_3D::OceanModel;
@@ -360,6 +375,8 @@ function OceanSplitExplicitConfiguration(
     periodicity = (false, false, false),
     boundary = ((1, 1), (1, 1), (2, 3)),
 )
+
+    (polyorder_horz, polyorder_vert) = isa(N, Int) ? (N, N) : N
 
     xrange = range(FT(0); length = Nˣ + 1, stop = model_3D.problem.Lˣ)
     yrange = range(FT(0); length = Nʸ + 1, stop = model_3D.problem.Lʸ)
@@ -385,13 +402,13 @@ function OceanSplitExplicitConfiguration(
         topology_2D,
         FloatType = FT,
         DeviceArray = array_type,
-        polynomialorder = N,
+        polynomialorder = polyorder_horz,
     )
     grid_3D = DiscontinuousSpectralElementGrid(
         topology_3D,
         FloatType = FT,
         DeviceArray = array_type,
-        polynomialorder = N,
+        polynomialorder = (polyorder_horz, polyorder_vert),
     )
 
     model_2D = BarotropicModel(model_3D)
@@ -406,7 +423,7 @@ function OceanSplitExplicitConfiguration(
 
     Q_2D = init_ode_state(dg_2D, FT(0); init_on_cpu = true)
 
-    vert_filter = CutoffFilter(grid_3D, polynomialorder(grid_3D) - 1)
+    vert_filter = CutoffFilter(grid_3D, polyorder_vert - 1)
     exp_filter = ExponentialFilter(grid_3D, 1, 8)
 
     flowintegral_dg = DGModel(
@@ -481,7 +498,7 @@ function OceanSplitExplicitConfiguration(
     return DriverConfiguration(
         OceanSplitExplicitConfigType(),
         name,
-        N,
+        (polyorder_horz, polyorder_vert),
         FT,
         array_type,
         solver_type,
@@ -498,7 +515,7 @@ end
 
 function SingleStackConfiguration(
     name::String,
-    N::Int,
+    N::Union{Int, NTuple{2, Int}},
     nelem_vert::Int,
     zmax::FT,
     param_set::AbstractParameterSet,
@@ -515,6 +532,8 @@ function SingleStackConfiguration(
     numerical_flux_second_order = CentralNumericalFluxSecondOrder(),
     numerical_flux_gradient = CentralNumericalFluxGradient(),
 ) where {FT <: AbstractFloat}
+
+    (polyorder_horz, polyorder_vert) = isa(N, Int) ? (N, N) : N
 
     print_model_info(model)
 
@@ -536,24 +555,26 @@ function SingleStackConfiguration(
         topology,
         FloatType = FT,
         DeviceArray = array_type,
-        polynomialorder = N,
+        polynomialorder = (polyorder_horz, polyorder_vert),
         meshwarp = meshwarp,
     )
 
     @info @sprintf(
         """
 Establishing single stack configuration for %s
-    precision        = %s
-    polynomial order = %d
-    domain_min       = %.2f m x%.2f m x%.2f m
-    domain_max       = %.2f m x%.2f m x%.2f m
-    #vert elems      = %d
-    MPI ranks        = %d
-    min(Δ_horz)      = %.2f m
-    min(Δ_vert)      = %.2f m""",
+    precision              = %s
+    horiz polynomial order = %d
+    vert polynomial order  = %d
+    domain_min             = %.2f m x%.2f m x%.2f m
+    domain_max             = %.2f m x%.2f m x%.2f m
+    # vert elems           = %d
+    MPI ranks              = %d
+    min(Δ_horz)            = %.2f m
+    min(Δ_vert)            = %.2f m""",
         name,
         FT,
-        N,
+        polyorder_horz,
+        polyorder_vert,
         xmin,
         ymin,
         zmin,
@@ -569,7 +590,7 @@ Establishing single stack configuration for %s
     return DriverConfiguration(
         SingleStackConfigType(),
         name,
-        N,
+        (polyorder_horz, polyorder_vert),
         FT,
         array_type,
         solver_type,
@@ -583,3 +604,21 @@ Establishing single stack configuration for %s
         SingleStackSpecificInfo(),
     )
 end
+
+import ..DGMethods: DGModel
+
+"""
+    DGModel(driver_config; kwargs...)
+
+Initialize a [`DGModel`](@ref) given a
+[`DriverConfiguration`](@ref) and keyword
+arguments supported by [`DGModel`](@ref).
+"""
+DGModel(driver_config; kwargs...) = DGModel(
+    driver_config.bl,
+    driver_config.grid,
+    driver_config.numerical_flux_first_order,
+    driver_config.numerical_flux_second_order,
+    driver_config.numerical_flux_gradient;
+    kwargs...,
+)

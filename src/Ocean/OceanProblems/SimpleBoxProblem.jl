@@ -173,9 +173,10 @@ function ocean_init_state!(
     p::SimpleBox,
     Q,
     A,
-    coords,
+    localgeo,
     t,
 )
+    coords = localgeo.coord
     k = (2π / p.Lˣ, 2π / p.Lʸ, 2π / p.H)
     ν = viscosity(m)
 
@@ -202,9 +203,10 @@ function ocean_init_state!(
     p::SimpleBox,
     Q,
     A,
-    coords,
+    localgeo,
     t,
 )
+    coords = localgeo.coord
     k = (2π / p.Lˣ, 2π / p.Lʸ, 2π / p.H)
     ν = (m.νʰ, m.νʰ, m.νᶻ)
 
@@ -233,7 +235,7 @@ function barotropic_state!(
 )
     gH, _ = params
 
-    M = @SMatrix [-νˣ * kˣ^2 gH * kˣ; -kˣ 0]
+    M = @SMatrix [-νˣ*kˣ^2 gH*kˣ; -kˣ 0]
     A = exp(M * t) * @SVector [1, 1]
 
     U = A[1] * sin(kˣ * x)
@@ -267,7 +269,7 @@ function barotropic_state!(
 )
     gH, f = params
 
-    M = @SMatrix [-νˣ * kˣ^2 f gH * kˣ; -f -νˣ * kˣ^2 0; -kˣ 0 0]
+    M = @SMatrix [-νˣ*kˣ^2 f gH*kˣ; -f -νˣ*kˣ^2 0; -kˣ 0 0]
     A = exp(M * t) * @SVector [1, 1, 1]
 
     U = A[1] * sin(kˣ * x)
@@ -341,10 +343,10 @@ initialize u,v with random values, η with 0, and θ with a constant (20)
 - `p`: HomogeneousBox problem object, used to dispatch on
 - `Q`: state vector
 - `A`: auxiliary state vector, not used
-- `coords`: the coordidinates, not used
+- `localgeo`: the local geometry, not used
 - `t`: time to evaluate at, not used
 """
-function ocean_init_state!(m::HBModel, p::HomogeneousBox, Q, A, coords, t)
+function ocean_init_state!(m::HBModel, p::HomogeneousBox, Q, A, localgeo, t)
     Q.u = @SVector [0, 0]
     Q.η = 0
     Q.θ = 20
@@ -354,7 +356,8 @@ end
 
 include("ShallowWaterInitialStates.jl")
 
-function ocean_init_state!(m::SWModel, p::HomogeneousBox, Q, A, coords, t)
+function ocean_init_state!(m::SWModel, p::HomogeneousBox, Q, A, localgeo, t)
+    coords = localgeo.coord
     if t == 0
         null_init_state!(p, m.turbulence, Q, A, coords, 0)
     else
@@ -377,10 +380,8 @@ jet stream like windstress
 @inline kinematic_stress(p::HomogeneousBox, y, ρ) =
     @SVector [(p.τₒ / ρ) * cos(y * π / p.Lʸ), -0]
 
-@inline kinematic_stress(
-    p::HomogeneousBox,
-    y,
-) = @SVector [-p.τₒ * cos(π * y / p.Lʸ), -0]
+@inline kinematic_stress(p::HomogeneousBox, y) =
+    @SVector [-p.τₒ * cos(π * y / p.Lʸ), -0]
 
 ##########################
 # Homogenous wind stress #
@@ -432,7 +433,7 @@ initialize u,v,η with 0 and θ linearly distributed between 9 at z=0 and 1 at z
 - `p`: OceanGyre problem object, used to dispatch on and obtain ocean height H
 - `Q`: state vector
 - `A`: auxiliary state vector, not used
-- `coords`: the coordidinates
+- `localgeo`: the local geometry information
 - `t`: time to evaluate at, not used
 """
 function ocean_init_state!(
@@ -440,9 +441,10 @@ function ocean_init_state!(
     p::OceanGyre,
     Q,
     A,
-    coords,
+    localgeo,
     t,
 )
+    coords = localgeo.coord
     @inbounds y = coords[2]
     @inbounds z = coords[3]
     @inbounds H = p.H
@@ -459,7 +461,7 @@ function ocean_init_state!(
     ::OceanGyre,
     Q,
     A,
-    coords,
+    localgeo,
     t,
 )
     Q.U = @SVector [-0, -0]
@@ -480,10 +482,8 @@ jet stream like windstress
 @inline kinematic_stress(p::OceanGyre, y, ρ) =
     @SVector [(p.τₒ / ρ) * cos(y * π / p.Lʸ), -0]
 
-@inline kinematic_stress(
-    p::OceanGyre,
-    y,
-) = @SVector [-p.τₒ * cos(π * y / p.Lʸ), -0]
+@inline kinematic_stress(p::OceanGyre, y) =
+    @SVector [-p.τₒ * cos(π * y / p.Lʸ), -0]
 
 """
     surface_flux(::OceanGyre)

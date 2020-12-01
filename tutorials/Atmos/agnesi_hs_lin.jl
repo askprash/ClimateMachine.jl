@@ -111,7 +111,9 @@ const param_set = EarthParameterSet()
 #md #     - `state.ρu`= 3-component vector for initial momentum profile
 #md #     - `state.ρe`= Scalar quantity for initial total-energy profile
 #md #       humidity
-function init_agnesi_hs_lin!(problem, bl, state, aux, (x, y, z), t)
+function init_agnesi_hs_lin!(problem, bl, state, aux, localgeo, t)
+    (x, y, z) = localgeo.coord
+
     ## Problem float-type
     FT = eltype(state)
 
@@ -184,7 +186,14 @@ end
 # model. The purpose of this is to populate the
 # `AtmosLESConfiguration` with arguments
 # appropriate to the problem being considered.
-function config_agnesi_hs_lin(FT, N, resolution, xmax, ymax, zmax)
+function config_agnesi_hs_lin(
+    ::Type{FT},
+    N,
+    resolution,
+    xmax,
+    ymax,
+    zmax,
+) where {FT}
     ##
     ## Explicit Rayleigh damping:
     ##
@@ -211,7 +220,7 @@ function config_agnesi_hs_lin(FT, N, resolution, xmax, ymax, zmax)
 
     ## Pass the sponge parameters to the sponge calculator
     rayleigh_sponge =
-        RayleighSponge{FT}(zmax, z_s, sponge_ampz, u_relaxation, 2)
+        RayleighSponge(FT, zmax, z_s, sponge_ampz, u_relaxation, 2)
 
     ## Define the time integrator:
     ## We chose an explicit single-rate LSRK144 for this problem

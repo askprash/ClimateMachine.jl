@@ -22,18 +22,7 @@ solvers. This is based on
 Currently only the low storage RK methods can be used as slow solvers
 
 ### References
-
-    @article{SchlegelKnothArnoldWolke2012,
-      title={Implementation of multirate time integration methods for air
-             pollution modelling},
-      author={Schlegel, M and Knoth, O and Arnold, M and Wolke, R},
-      journal={Geoscientific Model Development},
-      volume={5},
-      number={6},
-      pages={1395--1405},
-      year={2012},
-      publisher={Copernicus GmbH}
-    }
+ - [Schlegel2012](@cite)
 """
 mutable struct MultirateRungeKutta{SS, FS, RT} <: AbstractODESolver
     "slow solver"
@@ -78,6 +67,38 @@ function MultirateRungeKutta(
     slow_solver = solvers[1]
 
     MultirateRungeKutta(slow_solver, fast_solver, Q; dt = dt, t0 = t0)
+end
+
+function MultirateRungeKutta(
+    mrk,
+    op::TimeScaledRHS{2, RT} where {RT},
+    Q = nothing;
+    dt = 0,
+    t0 = 0,
+    steps = 0,
+) where {AT <: AbstractArray}
+
+    slow_solver = mrk(op.rhs![1], Q, dt = dt, t0 = t0)
+    fast_solver = mrk(op.rhs![2], Q, dt = dt, t0 = t0)
+
+    MultirateRungeKutta(slow_solver, fast_solver, Q; dt = dt, t0 = t0)
+end
+
+function dostep!(
+    Q,
+    mrrk::MultirateRungeKutta{SS},
+    param,
+    time::Real,
+    nsteps::Int,
+    iStage::Int,
+    slow_δ = nothing,
+    slow_rv_dQ = nothing,
+    slow_scaling = nothing,
+) where {SS <: LSRK2N}
+    for i in 1:nsteps
+        dostep!(Q, mrrk, param, time, slow_δ, slow_rv_dQ, slow_scaling)
+        time += mrrk.fast_solver.dt
+    end
 end
 
 function dostep!(

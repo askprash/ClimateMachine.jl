@@ -18,12 +18,19 @@ using ..Thermodynamics
         interpol = nothing,
     )
 
-Create and return a `DiagnosticsGroup` containing the
-"AtmosRefStatePerturbations" diagnostics for both LES and GCM
-configurations. All the diagnostics in the group will run at the
-specified `interval`, be interpolated to the specified boundaries
-and resolution, and written to files prefixed by `out_prefix`
-using `writer`.
+Create the "AtmosRefStatePerturbations" `DiagnosticsGroup` which contains
+perturbations from the (hydrostatic) reference state for:
+
+- rho: air density
+- pres: air pressure
+- temp: air temperature
+- et: total specific energy
+- qt: mass fraction of total water in air (NaN when not an `EquilMoist` moisture model)
+
+The perturbations are computed from variables on an interpolated grid
+(`interpol` _must_ be specified) and output on `x`, `y`, `z` or `lat`,
+`long`, `level` dimensions as well as a (unlimited) `time` dimension
+at the specified `interval`.
 """
 function setup_atmos_refstate_perturbations(
     ::ClimateMachineConfigType,
@@ -188,7 +195,11 @@ function atmos_refstate_perturbations_collect(
     mpirank = MPI.Comm_rank(mpicomm)
     grid = dg.grid
     topology = grid.topology
-    N = polynomialorder(grid)
+    # XXX: Needs updating for multiple polynomial orders
+    N = polynomialorders(dg.grid)
+    # Currently only support single polynomial order
+    @assert all(N[1] .== N)
+    N = N[1]
     Nq = N + 1
     Nqk = dimensionality(grid) == 2 ? 1 : Nq
     npoints = Nq * Nq * Nqk

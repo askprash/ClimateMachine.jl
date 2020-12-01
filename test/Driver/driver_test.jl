@@ -13,7 +13,9 @@ using CLIMAParameters.Planet: grav, MSLP
 struct EarthParameterSet <: AbstractEarthParameterSet end
 const param_set = EarthParameterSet()
 
-function init_test!(problem, bl, state, aux, (x, y, z), t)
+function init_test!(problem, bl, state, aux, localgeo, t)
+    (x, y, z) = localgeo.coord
+
     FT = eltype(state)
 
     z = FT(z)
@@ -83,7 +85,7 @@ function main()
     ode_solver = ClimateMachine.ExplicitSolverType()
     driver_config = ClimateMachine.AtmosLESConfiguration(
         "Driver test",
-        N,
+        (N, N),
         resolution,
         xmax,
         ymax,

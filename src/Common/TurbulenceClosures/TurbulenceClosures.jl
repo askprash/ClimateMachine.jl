@@ -85,7 +85,7 @@ export TurbulenceClosureModel,
     init_aux_turbulence!,
     init_aux_hyperdiffusion!,
     turbulence_nodal_update_auxiliary_state!,
-    sponge_viscosity_modifier!
+    sponge_viscosity_modifier
 
 # ### Abstract Type
 # We define a `TurbulenceClosureModel` abstract type and
@@ -510,40 +510,16 @@ end
 $(DocStringExtensions.FIELDS)
 
 # Smagorinsky Model Reference
-    article{doi:10.1175/1520-0493(1963)091<0099:GCEWTP>2.3.CO;2,
-      author = {Smagorinksy, J.},
-      title = {General circulation experiments with the primitive equations},
-      journal = {Monthly Weather Review},
-      volume = {91},
-      number = {3},
-      pages = {99-164},
-      year = {1963},
-      doi = {10.1175/1520-0493(1963)091<0099:GCEWTP>2.3.CO;2},
-      URL = {https://doi.org/10.1175/1520-0493(1963)091<0099:GCEWTP>2.3.CO;2},
-      eprint = {https://doi.org/10.1175/1520-0493(1963)091<0099:GCEWTP>2.3.CO;2}
-      }
+
+See [Smagorinsky1963](@cite)
 
 # Lilly Model Reference
-    article{doi:10.1111/j.2153-3490.1962.tb00128.x,
-      author = {LILLY, D. K.},
-      title = {On the numerical simulation of buoyant convection},
-      journal = {Tellus},
-      volume = {14},
-      number = {2},
-      pages = {148-172},
-      doi = {10.1111/j.2153-3490.1962.tb00128.x},
-      url = {https://onlinelibrary.wiley.com/doi/abs/10.1111/j.2153-3490.1962.tb00128.x},
-      eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1111/j.2153-3490.1962.tb00128.x},
-      year = {1962}
-      }
 
+See [Lilly1962](@cite)
 
 # Brunt-Väisälä Frequency Reference
-    Brunt-Vaisala frequency N² defined as in equation (1b) in
-      Durran, D.R. and J.B. Klemp, 1982:
-      On the Effects of Moisture on the Brunt-Väisälä Frequency.
-      J. Atmos. Sci., 39, 2152–2158,
-      https://doi.org/10.1175/1520-0469(1982)039<2152:OTEOMO>2.0.CO;2
+
+See [Durran1982](@cite)
 
 """
 struct SmagorinskyLilly{FT} <: TurbulenceClosureModel
@@ -661,16 +637,7 @@ $(DocStringExtensions.FIELDS)
 
 # Reference
 
-    @article{Vreman2004,
-      title={An eddy-viscosity subgrid-scale model for turbulent shear flow: Algebraic theory and applications},
-      author={Vreman, AW},
-      journal={Physics of fluids},
-      volume={16},
-      number={10},
-      pages={3670--3681},
-      year={2004},
-      publisher={AIP}
-    }
+ - [Vreman2004](@cite)
 """
 struct Vreman{FT} <: TurbulenceClosureModel
     "Smagorinsky Coefficient [dimensionless]"
@@ -766,18 +733,7 @@ $(DocStringExtensions.FIELDS)
 
 # Reference
 
-    @article{
-        doi:10.1063/1.5037039,
-        author = {Vreugdenhil,Catherine A.  and Taylor,John R. },
-        title = {Large-eddy simulations of stratified plane Couette flow using the anisotropic minimum-dissipation model},
-        journal = {Physics of Fluids},
-        volume = {30},
-        number = {8},
-        pages = {085104},
-        year = {2018},
-        doi = {10.1063/1.5037039},
-        URL = {https://doi.org/10.1063/1.5037039}
-    }
+See [Vreugdenhil2018](@cite)
 
 """
 struct AnisoMinDiss{FT} <: TurbulenceClosureModel
@@ -1060,7 +1016,7 @@ No modifiers applied to viscosity/diffusivity in sponge layer
 $(DocStringExtensions.FIELDS)
 """
 struct NoViscousSponge <: ViscousSponge end
-function sponge_viscosity_modifier!(
+function sponge_viscosity_modifier(
     bl::BalanceLaw,
     m::NoViscousSponge,
     ν,
@@ -1068,7 +1024,7 @@ function sponge_viscosity_modifier!(
     τ,
     aux,
 )
-    nothing
+    return (ν, D_t, τ)
 end
 
 """ 
@@ -1090,7 +1046,7 @@ struct UpperAtmosSponge{FT} <: ViscousSponge
     γ::FT
 end
 
-function sponge_viscosity_modifier!(
+function sponge_viscosity_modifier(
     bl::BalanceLaw,
     m::UpperAtmosSponge,
     ν,
@@ -1106,6 +1062,7 @@ function sponge_viscosity_modifier!(
         D_t += β_sponge * D_t
         τ += β_sponge * τ
     end
+    return (ν, D_t, τ)
 end
 
 end #module TurbulenceClosures.jl

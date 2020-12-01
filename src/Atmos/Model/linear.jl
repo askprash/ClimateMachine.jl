@@ -82,6 +82,16 @@ end
 
 abstract type AtmosLinearModel <: BalanceLaw end
 
+"""
+    vars_state(m::AtmosLinearModel, ::Prognostic, FT)
+
+Conserved state variables (prognostic variables).
+
+!!! warning
+
+    `AtmosLinearModel` state ordering must be a contiguous subset of the initial
+    state of `AtmosModel` since a shared state is used.
+"""
 function vars_state(lm::AtmosLinearModel, st::Prognostic, FT)
     @vars begin
         ρ::FT
@@ -156,15 +166,19 @@ function wavespeed(
     return soundspeed_air(lm.atmos.param_set, ref.T)
 end
 
+boundary_conditions(atmoslm::AtmosLinearModel) = (AtmosBC(), AtmosBC())
+
 function boundary_state!(
     nf::NumericalFluxFirstOrder,
+    bc,
     atmoslm::AtmosLinearModel,
     args...,
 )
-    atmos_boundary_state!(nf, AtmosBC(), atmoslm, args...)
+    atmos_boundary_state!(nf, bc, atmoslm, args...)
 end
 function boundary_state!(
     nf::NumericalFluxSecondOrder,
+    bc,
     atmoslm::AtmosLinearModel,
     args...,
 )
@@ -180,7 +194,7 @@ init_state_prognostic!(
     lm::AtmosLinearModel,
     state::Vars,
     aux::Vars,
-    coords,
+    localgeo,
     t,
 ) = nothing
 

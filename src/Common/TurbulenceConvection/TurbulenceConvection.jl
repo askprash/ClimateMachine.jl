@@ -79,6 +79,8 @@ function flux_first_order!(
     state::Vars,
     aux::Vars,
     t::Real,
+    ts,
+    direction,
 )
     return nothing
 end
@@ -142,7 +144,7 @@ function init_state_prognostic!(
     bl::BalanceLaw,
     state,
     aux,
-    (x, y, z),
+    localgeo,
     t,
 ) end
 

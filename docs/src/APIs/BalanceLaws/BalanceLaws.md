@@ -10,6 +10,29 @@ CurrentModule = ClimateMachine.BalanceLaws
 BalanceLaw
 ```
 
+## Tendency types and methods
+
+```@docs
+PrognosticVariable
+AbstractOrder
+AbstractTendencyType
+TendencyDef
+eq_tends
+prognostic_vars
+fluxes
+sources
+show_tendencies
+```
+
+## Methods for fluxes and sources
+
+```@docs
+flux
+source
+Σfluxes
+Σsources
+```
+
 ## State variable types
 
 ```@docs
@@ -65,11 +88,17 @@ compute_gradient_argument!
 transform_post_gradient_laplacian!
 ```
 
+## Boundary conditions
+
+```@docs
+boundary_conditions
+boundary_state!
+```
+
 ## Auxiliary kernels
 
 ```@docs
 wavespeed
-boundary_state!
 update_auxiliary_state!
 update_auxiliary_state_gradient!
 nodal_update_auxiliary_state!

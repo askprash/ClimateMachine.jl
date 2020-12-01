@@ -303,7 +303,11 @@ function empty_banded_matrix(
     device = array_device(Q)
 
     nstate = number_states(bl, Prognostic())
-    N = polynomialorder(grid)
+    # XXX: Needs updating for multiple polynomial orders
+    N = polynomialorders(grid)
+    # Currently only support single polynomial order
+    @assert all(N[1] .== N)
+    N = N[1]
     Nq = N + 1
 
     # p is lower bandwidth
@@ -387,7 +391,11 @@ function update_banded_matrix!(
     device = array_device(Q)
 
     nstate = number_states(bl, Prognostic())
-    N = polynomialorder(grid)
+    # XXX: Needs updating for multiple polynomial orders
+    N = polynomialorders(grid)
+    # Currently only support single polynomial order
+    @assert all(N[1] .== N)
+    N = N[1]
     Nq = N + 1
 
     # p is lower bandwidth
@@ -517,16 +525,7 @@ is stored as
 
 ### Reference
 
-    @book{GolubVanLoan,
-      title = {Matrix Computations},
-      author = {Gene H. Golub and Charles F. Van Loan},
-      edition = {4th},
-      isbn = {9781421407944},
-      publisher = {Johns Hopkins University Press},
-      address = {Baltimore, MD, USA},
-      url = {http://www.cs.cornell.edu/cv/GVL4/golubandvanloan.htm},
-      year = 2013
-    }
+ - [GolubVanLoan2013](@cite)
 
 """ band_lu_kernel!
 @kernel function band_lu_kernel!(A)
@@ -584,16 +583,7 @@ eband - 1`.
 
 ### Reference
 
-    @book{GolubVanLoan,
-      title = {Matrix Computations},
-      author = {Gene H. Golub and Charles F. Van Loan},
-      edition = {4th},
-      isbn = {9781421407944},
-      publisher = {Johns Hopkins University Press},
-      address = {Baltimore, MD, USA},
-      url = {http://www.cs.cornell.edu/cv/GVL4/golubandvanloan.htm},
-      year = 2013
-    }
+ - [GolubVanLoan2013](@cite)
 
 """ band_forward_kernel!
 @kernel function band_forward_kernel!(b, LU)
@@ -631,7 +621,8 @@ eband - 1`.
                     jj = s + (k - 1) * nstate + (v - 1) * nstate * Nq
 
                     @unroll for ii in 2:(p + 1)
-                        Lii = single_column(LU) ? LU[ii + q, jj] :
+                        Lii =
+                            single_column(LU) ? LU[ii + q, jj] :
                             LU[i, j, ii + q, jj, h]
                         l_b[ii] -= Lii * l_b[1]
                     end
@@ -677,16 +668,7 @@ eband - 1`.
 
 ### Reference
 
-    @book{GolubVanLoan,
-      title = {Matrix Computations},
-      author = {Gene H. Golub and Charles F. Van Loan},
-      edition = {4th},
-      isbn = {9781421407944},
-      publisher = {Johns Hopkins University Press},
-      address = {Baltimore, MD, USA},
-      url = {http://www.cs.cornell.edu/cv/GVL4/golubandvanloan.htm},
-      year = 2013
-    }
+ - [GolubVanLoan2013](@cite)
 
 """ band_back_kernel!
 @kernel function band_back_kernel!(b, LU)
@@ -726,7 +708,8 @@ eband - 1`.
                 @unroll for s in nstate:-1:1
                     jj = s + (k - 1) * nstate + (v - 1) * nstate * Nq
 
-                    l_b[q + 1] /= single_column(LU) ? LU[q + 1, jj] :
+                    l_b[q + 1] /=
+                        single_column(LU) ? LU[q + 1, jj] :
                         LU[i, j, q + 1, jj, h]
 
                     @unroll for ii in 1:q

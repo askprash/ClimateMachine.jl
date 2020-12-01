@@ -4,7 +4,7 @@ using ..MPIStateArrays
 using ..MPIStateArrays: array_device, realview
 
 using ..Mesh.Grids
-import ..Mesh.Grids: polynomialorder, dimensionality
+import ..Mesh.Grids: polynomialorders, dimensionality
 using ..Mesh.Topologies
 using ..DGMethods
 using ..DGMethods: DGModel
@@ -53,7 +53,7 @@ abstract type AbstractNonlinearSolver <: AbstractSystemSolver end
 Only applies the linear solver (no Newton solver)
 """
 struct LSOnly <: AbstractNonlinearSolver
-    linearsolver
+    linearsolver::Any
 end
 
 function donewtoniteration!(
@@ -124,7 +124,7 @@ function nonlinearsolve!(
         update_Q!(jvp!, Q, args...)
 
         # update preconditioner based on finite difference, with jvp!
-        preconditioner_update!(jvp!, rhs!.f!, preconditioner, nothing, FT(NaN))
+        preconditioner_update!(jvp!, rhs!.f!, preconditioner, args...)
 
         # do newton iteration with Q^{n+1} = Q^{n} - dF/dQ(Q^n)⁻¹ (rhs!(Q) - Qrhs)
         residual_norm, linear_iterations = donewtoniteration!(
@@ -136,7 +136,7 @@ function nonlinearsolve!(
             solver,
             args...,
         )
-        @info "Linear solver converged in $linear_iterations iterations"
+        # @info "Linear solver converged in $linear_iterations iterations"
         iters += 1
 
         preconditioner_counter_update!(preconditioner)
@@ -151,12 +151,13 @@ function nonlinearsolve!(
         # ||Delta Q|| / ||Q|| ?
         relresidual = residual_norm / initial_residual_norm
         if relresidual < tol || residual_norm < tol
-            @info "Newton converged in $iters iterations!"
+            # @info "Newton converged in $iters iterations!"
             converged = true
         end
     end
 
-    converged || @warn "Nonlinear solver did not converge after $iters iterations"
+    converged ||
+        @warn "Nonlinear solver did not converge after $iters iterations"
     cvg[] = converged
 
     iters
@@ -276,7 +277,8 @@ function linearsolve!(
         achieved_tolerance = residual_norm / threshold * solver.rtol
     end
 
-    converged || @warn "Solver did not attain convergence after $iters iterations"
+    converged ||
+        @warn "Solver did not attain convergence after $iters iterations"
     cvg[] = converged
 
     iters

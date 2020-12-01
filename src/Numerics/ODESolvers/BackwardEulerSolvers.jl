@@ -117,7 +117,7 @@ mutable struct LinBESolver{FT, F, LS} <: AbstractBackwardEulerSolver
     # used only for iterative solver
     preconditioner::AbstractPreconditioner
     # used only for direct solver
-    factors
+    factors::Any
 end
 
 Δt_is_adjustable(lin::LinBESolver) = lin.isadjustable
@@ -143,8 +143,8 @@ function setup_backward_Euler_solver(
     # construct an empty preconditioner
     preconditioner = (
         preconditioner_update_freq > 0 ?
-            ColumnwiseLUPreconditioner(f_imp!, Q, preconditioner_update_freq) :
-            NoPreconditioner()
+        ColumnwiseLUPreconditioner(f_imp!, Q, preconditioner_update_freq) :
+        NoPreconditioner()
     )
 
     LinBESolver(
@@ -181,13 +181,7 @@ function (lin::LinBESolver)(Q, Qhat, α, p, t)
 
     if typeof(lin.solver) <: AbstractIterativeSystemSolver
         FT = eltype(α)
-        preconditioner_update!(
-            rhs!,
-            rhs!.f!,
-            lin.preconditioner,
-            nothing,
-            FT(NaN),
-        )
+        preconditioner_update!(rhs!, rhs!.f!, lin.preconditioner, p, t)
         linearsolve!(rhs!, lin.preconditioner, lin.solver, Q, Qhat, p, t)
         preconditioner_counter_update!(lin.preconditioner)
     else
@@ -282,8 +276,8 @@ function setup_backward_Euler_solver(
     # construct an empty preconditioner
     preconditioner = (
         preconditioner_update_freq > 0 ?
-            ColumnwiseLUPreconditioner(f_imp!, Q, preconditioner_update_freq) :
-            NoPreconditioner()
+        ColumnwiseLUPreconditioner(f_imp!, Q, preconditioner_update_freq) :
+        NoPreconditioner()
     )
     NonLinBESolver(
         α,

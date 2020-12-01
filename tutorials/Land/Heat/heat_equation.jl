@@ -85,6 +85,8 @@ import ClimateMachine.BalanceLaws:
     nodal_update_auxiliary_state!,
     nodal_init_state_auxiliary!,
     init_state_prognostic!,
+    BoundaryCondition,
+    boundary_conditions,
     boundary_state!
 
 import ClimateMachine.DGMethods: calculate_dt
@@ -92,7 +94,7 @@ import ClimateMachine.DGMethods: calculate_dt
 # ## Initialization
 
 # Define the float type (`Float64` or `Float32`)
-FT = Float64;
+const FT = Float64;
 # Initialize ClimateMachine for CPU.
 ClimateMachine.init(; disable_gpu = true);
 
@@ -176,7 +178,7 @@ function init_state_prognostic!(
     m::HeatModel,
     state::Vars,
     aux::Vars,
-    coords,
+    localgeo,
     t::Real,
 )
     state.ρcT = m.ρc * aux.T
@@ -255,32 +257,47 @@ end;
 # internally reformulated to first-order unknowns.
 # Boundary conditions must be specified for all unknowns, both first-order and
 # second-order unknowns which have been reformulated.
+struct DirichletBC <: BoundaryCondition end;
+struct NeumannBC <: BoundaryCondition end;
+
+boundary_conditions(::HeatModel) = (DirichletBC(), NeumannBC())
 
 # The boundary conditions for `ρcT` (first order unknown)
 function boundary_state!(
     nf,
+    bc::DirichletBC,
     m::HeatModel,
     state⁺::Vars,
     aux⁺::Vars,
     n⁻,
     state⁻::Vars,
     aux⁻::Vars,
-    bctype,
     t,
     _...,
 )
     ## Apply Dirichlet BCs
-    if bctype == 1 # At bottom
-        state⁺.ρcT = m.ρc * m.T_bottom
-    elseif bctype == 2 # At top
-        nothing
-    end
+    state⁺.ρcT = m.ρc * m.T_bottom
+end;
+function boundary_state!(
+    nf,
+    bc::NeumannBC,
+    m::HeatModel,
+    state⁺::Vars,
+    aux⁺::Vars,
+    n⁻,
+    state⁻::Vars,
+    aux⁻::Vars,
+    t,
+    _...,
+)
+    nothing
 end;
 
 # The boundary conditions for `ρcT` are specified here for second-order
 # unknowns
 function boundary_state!(
     nf,
+    bc::DirichletBC,
     m::HeatModel,
     state⁺::Vars,
     diff⁺::Vars,
@@ -289,16 +306,27 @@ function boundary_state!(
     state⁻::Vars,
     diff⁻::Vars,
     aux⁻::Vars,
-    bctype,
+    t,
+    _...,
+)
+    nothing
+end;
+function boundary_state!(
+    nf,
+    bc::NeumannBC,
+    m::HeatModel,
+    state⁺::Vars,
+    diff⁺::Vars,
+    aux⁺::Vars,
+    n⁻,
+    state⁻::Vars,
+    diff⁻::Vars,
+    aux⁻::Vars,
     t,
     _...,
 )
     ## Apply Neumann BCs
-    if bctype == 1 # At bottom
-        nothing
-    elseif bctype == 2 # At top
-        diff⁺.α∇ρcT = n⁻ * m.flux_top
-    end
+    diff⁺.α∇ρcT = n⁻ * m.flux_top
 end;
 
 # # Spatial discretization
@@ -409,20 +437,21 @@ mkpath(output_dir);
 z_scale = 100; # convert from meters to cm
 z_key = "z";
 z_label = "z [cm]";
-z = get_z(grid, z_scale);
+z = get_z(grid; z_scale = z_scale, rm_dupes = true);
 
 # Create an array to store the solution:
-all_data = Dict[dict_of_nodal_states(solver_config, [z_key])]  # store initial condition at ``t=0``
+all_data = Dict[dict_of_nodal_states(solver_config; interp = true)]  # store initial condition at ``t=0``
 time_data = FT[0]                                      # store time data
 
 export_plot(
     z,
+    time_data,
     all_data,
     ("ρcT",),
     joinpath(output_dir, "initial_condition.png");
     xlabel = "ρcT",
     ylabel = z_label,
-    time_data = time_data,
+    xlims = (m.initialT - 1, m.T_bottom + 1),
 );
 # ![](initial_condition.png)
 
@@ -443,7 +472,7 @@ const every_x_simulation_time = ceil(Int, timeend / n_outputs);
 # `all_data` for time the callback is executed. In addition, time is collected
 # and appended to `time_data`.
 callback = GenericCallbacks.EveryXSimulationTime(every_x_simulation_time) do
-    push!(all_data, dict_of_nodal_states(solver_config, [z_key]))
+    push!(all_data, dict_of_nodal_states(solver_config; interp = true))
     push!(time_data, gettime(solver_config.solver))
     nothing
 end;
@@ -456,7 +485,7 @@ end;
 ClimateMachine.invoke!(solver_config; user_callbacks = (callback,));
 
 # Append result at the end of the last time step:
-push!(all_data, dict_of_nodal_states(solver_config, [z_key]));
+push!(all_data, dict_of_nodal_states(solver_config; interp = true));
 push!(time_data, gettime(solver_config.solver));
 
 # # Post-processing
@@ -472,14 +501,24 @@ push!(time_data, gettime(solver_config.solver));
 
 export_plot(
     z,
+    time_data,
     all_data,
     ("ρcT",),
     joinpath(output_dir, "solution_vs_time.png");
     xlabel = "ρcT",
     ylabel = z_label,
-    time_data = time_data,
 );
 # ![](solution_vs_time.png)
+
+export_contour(
+    z,
+    time_data,
+    all_data,
+    "ρcT",
+    joinpath(output_dir, "solution_contour.png");
+    ylabel = "z [cm]",
+)
+# ![](solution_contour.png)
 
 # The results look as we would expect: a fixed temperature at the bottom is
 # resulting in heat flux that propagates up the domain. To run this file, and

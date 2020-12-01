@@ -30,7 +30,7 @@ Base.@kwdef struct AcousticWaveSetup{FT}
     nv::Int = 1
 end
 
-function (setup::AcousticWaveSetup)(problem, bl, state, aux, coords, t)
+function (setup::AcousticWaveSetup)(problem, bl, state, aux, localgeo, t)
     # callable to set initial conditions
     FT = eltype(state)
 
@@ -73,7 +73,7 @@ function main()
 
     ode_solver = ClimateMachine.MISSolverType(;
         splitting_type = ClimateMachine.SlowFastSplitting(),
-        nsubsteps = 20,
+        nsubsteps = (20,),
     )
 
     setup = AcousticWaveSetup{FT}()
@@ -89,7 +89,7 @@ function main()
         ref_state = ref_state,
         turbulence = turbulence,
         moisture = DryModel(),
-        source = Gravity(),
+        source = (Gravity(),),
     )
 
     driver_config = ClimateMachine.AtmosGCMConfiguration(
@@ -110,7 +110,7 @@ function main()
     )
 
     isdir(ClimateMachine.Settings.checkpoint_dir) ||
-    mkpath(ClimateMachine.Settings.checkpoint_dir)
+        mkpath(ClimateMachine.Settings.checkpoint_dir)
 
     @testset "Checkpoint/restart unit tests" begin
         rm_checkpoint(

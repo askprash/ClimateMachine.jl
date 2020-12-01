@@ -27,7 +27,7 @@ using CLIMAParameters.Planet: day, planet_radius
 struct EarthParameterSet <: AbstractEarthParameterSet end
 const param_set = EarthParameterSet()
 
-function init_solid_body_rotation!(problem, bl, state, aux, coords, t)
+function init_solid_body_rotation!(problem, bl, state, aux, localgeo, t)
     FT = eltype(state)
 
     # initial velocity profile (we need to transform the vector into the Cartesian
@@ -79,12 +79,11 @@ end
 function main()
     # Driver configuration parameters
     FT = Float64                             # floating type precision
-    poly_order = 3                           # discontinuous Galerkin polynomial order
-    n_horz = 12                              # horizontal element number
-    n_vert = 6                               # vertical element number
-    n_days::FT = 0.5
+    poly_order = 5                           # discontinuous Galerkin polynomial order
+    n_horz = 8                              # horizontal element number
+    n_vert = 4                               # vertical element number
     timestart::FT = 0                        # start time (s)
-    timeend::FT = n_days * day(param_set)    # end time (s)
+    timeend::FT = 7200
 
     # Set up a reference state for linearization of equations
     temp_profile_ref =
@@ -171,6 +170,7 @@ function main()
         norm(solver_config.Q .- init_solver_config.Q) /
         norm(init_solver_config.Q)
     @info "Relative error = $relative_error"
+    @test relative_error < 1e-9
 end
 
 function config_diagnostics(FT, driver_config)

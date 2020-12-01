@@ -85,7 +85,12 @@ function OceanDGModel(
     gradnumflux;
     kwargs...,
 )
-    vert_filter = CutoffFilter(grid, polynomialorder(grid) - 1)
+    # XXX: Needs updating for multiple polynomial orders
+    N = polynomialorders(grid)
+    # Currently only support single polynomial order
+    @assert all(N[1] .== N)
+    N = N[1]
+    vert_filter = CutoffFilter(grid, N - 1)
     exp_filter = ExponentialFilter(grid, 1, 8)
 
     flowintegral_dg = DGModel(
@@ -168,8 +173,8 @@ function vars_state(m::OceanModel, ::Prognostic, T)
     end
 end
 
-function init_state_prognostic!(m::OceanModel, Q::Vars, A::Vars, coords, t)
-    return ocean_init_state!(m, m.problem, Q, A, coords, t)
+function init_state_prognostic!(m::OceanModel, Q::Vars, A::Vars, localgeo, t)
+    return ocean_init_state!(m, m.problem, Q, A, localgeo, t)
 end
 
 function vars_state(m::OceanModel, ::Auxiliary, T)
@@ -238,9 +243,9 @@ end
     ν = viscosity_tensor(m)
     #   D.ν∇u = ν * G.u
     D.ν∇u = @SMatrix [
-        m.νʰ * G.ud[1, 1] m.νʰ * G.ud[1, 2]
-        m.νʰ * G.ud[2, 1] m.νʰ * G.ud[2, 2]
-        m.νᶻ * G.u[3, 1] m.νᶻ * G.u[3, 2]
+        m.νʰ*G.ud[1, 1] m.νʰ*G.ud[1, 2]
+        m.νʰ*G.ud[2, 1] m.νʰ*G.ud[2, 2]
+        m.νᶻ*G.u[3, 1] m.νᶻ*G.u[3, 2]
     ]
 
     κ = diffusivity_tensor(m, G.θ[3])
@@ -256,11 +261,8 @@ end
     if m.numImplSteps > 0
         κ = (@SVector [m.κʰ, m.κʰ, m.κᶻ * 0.5])
     else
-        ∂θ∂z < 0 ? κ = (@SVector [m.κʰ, m.κʰ, m.κᶜ]) : κ = (@SVector [
-            m.κʰ,
-            m.κʰ,
-            m.κᶻ,
-        ])
+        ∂θ∂z < 0 ? κ = (@SVector [m.κʰ, m.κʰ, m.κᶜ]) :
+        κ = (@SVector [m.κʰ, m.κʰ, m.κᶻ])
     end
 
     return Diagonal(κ)
@@ -516,7 +518,10 @@ function update_auxiliary_state!(
     update_auxiliary_state!(f!, dg, m, ct3d_dQ, t, elems)
     #----------
 
-    Nq, Nqk, _, _, nelemv, nelemh, nrealelemh, _ = basic_grid_info(dg)
+    info = basic_grid_info(dg)
+    Nq, Nqk = info.Nq, info.Nqk
+    nelemv, nelemh = info.nvertelem, info.nhorzelem
+    nrealelemh = info.nhorzrealelem
 
     # compute integrals for w and pkin
     indefinite_stack_integral!(dg, m, Q, A, t, elems) # bottom -> top
@@ -590,7 +595,8 @@ function update_penalty!(
     return nothing
 end
 
-@inline function boundary_state!(nf, ocean::OceanModel, args...)
-    boundary_conditions = ocean.problem.boundary_conditions
-    return ocean_boundary_state!(nf, boundary_conditions, ocean, args...)
+boundary_conditions(ocean::OceanModel) = ocean.problem.boundary_conditions
+
+@inline function boundary_state!(nf, bc, ocean::OceanModel, args...)
+    return _ocean_boundary_state!(nf, bc, ocean, args...)
 end

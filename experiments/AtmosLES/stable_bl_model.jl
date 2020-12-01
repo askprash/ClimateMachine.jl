@@ -1,37 +1,26 @@
 #!/usr/bin/env julia --project
+#=
+# This experiment file establishes the initial conditions, boundary conditions,
+# source terms and simulation parameters (domain size + resolution) for the
+# GABLS LES case ([Beare2006](@cite); [Kosovic2000](@cite)).
+#
+## [Kosovic2000](@cite)
+#
+# To simulate the experiment, type in
+#
+# julia --project experiments/AtmosLES/stable_bl_les.jl
+=#
 
-## ### Unsteady Boundary Layer LES
-## @article{Kitamura2016,
-## author={Kitamura, Yuji
-## and Ito, Junshi},
-## title={Revisiting the Bulk Relation for Heat Flux in the Free Convection Limit},
-## journal={Boundary-Layer Meteorology},
-## year={2016},
-## month={Jan},
-## day={01},
-## volume={158},
-## number={1},
-## pages={93-103},
-## issn={1573-1472},
-## doi={10.1007/s10546-015-0075-z},
-## url={https://doi.org/10.1007/s10546-015-0075-z}
-## }
-
-##  @article{doi:10.1029/2018MS001534,
-##  author = {Nishizawa, S. and Kitamura, Y.},
-##  title = {A Surface Flux Scheme Based on the Monin-Obukhov Similarity for Finite Volume Models},
-##  journal = {Journal of Advances in Modeling Earth Systems},
-##  volume = {10},
-##  number = {12},
-##  pages = {3159-3175},
-##  year = {2018}
-##  doi = {10.1029/2018MS001534},
-##  url = {https://agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/2018MS001534},
-##  }
+using ArgParse
+using Distributions
+using Random
+using StaticArrays
+using Test
+using DocStringExtensions
+using LinearAlgebra
+using Printf
 
 using ClimateMachine
-ClimateMachine.init(parse_clargs = true)
-
 using ClimateMachine.Atmos
 using ClimateMachine.Orientations
 using ClimateMachine.ConfigTypes
@@ -43,14 +32,10 @@ using ClimateMachine.Mesh.Grids
 using ClimateMachine.ODESolvers
 using ClimateMachine.Thermodynamics
 using ClimateMachine.TurbulenceClosures
+using ClimateMachine.TurbulenceConvection
 using ClimateMachine.VariableTemplates
-
-using Distributions
-using Random
-using StaticArrays
-using Test
-using DocStringExtensions
-using LinearAlgebra
+using ClimateMachine.BalanceLaws:
+    BalanceLaw, Auxiliary, Gradient, GradientFlux, Prognostic
 
 using CLIMAParameters
 using CLIMAParameters.Planet: R_d, cp_d, cv_d, MSLP, grav, day
@@ -61,9 +46,9 @@ import ClimateMachine.Atmos: atmos_source!, flux_second_order!
 using ClimateMachine.Atmos: altitude, recover_thermo_state
 
 """
-  UnstableBL Geostrophic Forcing (Source)
+  StableBL Geostrophic Forcing (Source)
 """
-struct UnstableBLGeostrophic{FT} <: Source
+struct StableBLGeostrophic{FT} <: AbstractSource
     "Coriolis parameter [s⁻¹]"
     f_coriolis::FT
     "Eastward geostrophic velocity `[m/s]` (Base)"
@@ -74,7 +59,7 @@ struct UnstableBLGeostrophic{FT} <: Source
     v_geostrophic::FT
 end
 function atmos_source!(
-    s::UnstableBLGeostrophic,
+    s::StableBLGeostrophic,
     atmos::AtmosModel,
     source::Vars,
     state::Vars,
@@ -100,9 +85,9 @@ function atmos_source!(
 end
 
 """
-  UnstableBL Sponge (Source)
+  StableBL Sponge (Source)
 """
-struct UnstableBLSponge{FT} <: Source
+struct StableBLSponge{FT} <: AbstractSource
     "Maximum domain altitude (m)"
     z_max::FT
     "Altitude at with sponge starts (m)"
@@ -119,7 +104,7 @@ struct UnstableBLSponge{FT} <: Source
     v_geostrophic::FT
 end
 function atmos_source!(
-    s::UnstableBLSponge,
+    s::StableBLSponge,
     atmos::AtmosModel,
     source::Vars,
     state::Vars,
@@ -150,9 +135,10 @@ function atmos_source!(
 end
 
 """
-  Initial Condition for UnstableBoundaryLayer LES
+  Initial Condition for StableBoundaryLayer LES
 """
-function init_problem!(problem, bl, state, aux, (x, y, z), t)
+function init_problem!(problem, bl, state, aux, localgeo, t)
+    (x, y, z) = localgeo.coord
     # Problem floating point precision
     FT = eltype(state)
     R_gas::FT = R_d(bl.param_set)
@@ -170,13 +156,20 @@ function init_problem!(problem, bl, state, aux, (x, y, z), t)
     q_tot::FT = 0
     # Piecewise functions for potential temperature and total moisture
     z1 = FT(100)
-    θ_liq = FT(288) + FT(4 / 1000) * z
+    if z <= z1
+        θ_liq = FT(265)
+    else
+        θ_liq = FT(265) + FT(0.01) * (z - z1)
+    end
     θ = θ_liq
     π_exner = FT(1) - _grav / (c_p * θ) * z # exner pressure
     ρ = p0 / (R_gas * θ) * (π_exner)^(c_v / R_gas) # density
     # Establish thermodynamic state and moist phase partitioning
-    TS = PhaseEquil_ρθq(bl.param_set, ρ, θ_liq, q_tot)
-
+    if bl.moisture isa DryModel
+        TS = PhaseDry_ρθ(bl.param_set, ρ, θ_liq)
+    else
+        TS = PhaseEquil_ρθq(bl.param_set, ρ, θ_liq, q_tot)
+    end
     # Compute momentum contributions
     ρu = ρ * u
     ρv = ρ * v
@@ -191,42 +184,58 @@ function init_problem!(problem, bl, state, aux, (x, y, z), t)
     state.ρ = ρ
     state.ρu = SVector(ρu, ρv, ρw)
     state.ρe = ρe_tot
-    state.moisture.ρq_tot = ρ * q_tot
-
-    if z <= FT(400) # Add random perturbations to bottom 50m of model
+    if !(bl.moisture isa DryModel)
+        state.moisture.ρq_tot = ρ * q_tot
+    end
+    if z <= FT(50) # Add random perturbations to bottom 50m of model
         state.ρe += rand() * ρe_tot / 100
     end
+    init_state_prognostic!(bl.turbconv, bl, state, aux, localgeo, t)
 end
 
-function surface_temperature_variation(state, aux, t)
+function surface_temperature_variation(bl, state, t)
     FT = eltype(state)
     ρ = state.ρ
-    q_tot = state.moisture.ρq_tot / ρ
-    θ_liq_sfc = FT(291.15) + FT(20) * sinpi(FT(t / 12 / 3600))
-    TS = PhaseEquil_ρθq(param_set, ρ, θ_liq_sfc, q_tot)
+    θ_liq_sfc = FT(265) - FT(1 / 4) * (t / 3600)
+    if bl.moisture isa DryModel
+        TS = PhaseDry_ρθ(bl.param_set, ρ, θ_liq_sfc)
+    else
+        q_tot = state.moisture.ρq_tot / ρ
+        TS = PhaseEquil_ρθq(bl.param_set, ρ, θ_liq_sfc, q_tot)
+    end
     return air_temperature(TS)
 end
 
-function config_problem(::Type{FT}, N, resolution, xmax, ymax, zmax) where {FT}
+function stable_bl_model(
+    ::Type{FT},
+    config_type,
+    zmax,
+    surface_flux;
+    turbconv = NoTurbConv(),
+    moisture_model = "dry",
+) where {FT}
 
     ics = init_problem!     # Initial conditions
 
     C_smag = FT(0.23)     # Smagorinsky coefficient
     C_drag = FT(0.001)    # Momentum exchange coefficient
-    z_sponge = FT(2560)     # Start of sponge layer
+    u_star = FT(0.30)
+
+    z_sponge = FT(300)     # Start of sponge layer
     α_max = FT(0.75)       # Strength of sponge layer (timescale)
     γ = 2                  # Strength of sponge layer (exponent)
-    u_geostrophic = FT(4)        # Eastward relaxation speed
+
+    u_geostrophic = FT(8)        # Eastward relaxation speed
     u_slope = FT(0)              # Slope of altitude-dependent relaxation speed
     v_geostrophic = FT(0)        # Northward relaxation speed
-    f_coriolis = FT(1.031e-4) # Coriolis parameter
-    u_star = FT(0.3)
+    f_coriolis = FT(1.39e-4) # Coriolis parameter at 73N
+
     q_sfc = FT(0)
 
     # Assemble source components
-    source = (
+    source_default = (
         Gravity(),
-        UnstableBLSponge{FT}(
+        StableBLSponge{FT}(
             zmax,
             z_sponge,
             α_max,
@@ -235,68 +244,96 @@ function config_problem(::Type{FT}, N, resolution, xmax, ymax, zmax) where {FT}
             u_slope,
             v_geostrophic,
         ),
-        UnstableBLGeostrophic{FT}(
+        StableBLGeostrophic{FT}(
             f_coriolis,
             u_geostrophic,
             u_slope,
             v_geostrophic,
         ),
     )
-
-    # Choose default IMEX solver
-    ode_solver_type = ClimateMachine.ExplicitSolverType()
-
+    if moisture_model == "dry"
+        moisture = DryModel()
+    elseif moisture_model == "equilibrium"
+        source = source_default
+        moisture = EquilMoist{FT}(; maxiter = 5, tolerance = FT(0.1))
+    elseif moisture_model == "nonequilibrium"
+        source = (source_default..., CreateClouds()...)
+        moisture = NonEquilMoist()
+    else
+        @warn @sprintf(
+            """
+%s: unrecognized moisture_model in source terms, using the defaults""",
+            moisture_model,
+        )
+        source = source_default
+    end
     # Set up problem initial and boundary conditions
-    moisture_flux = FT(0)
-    problem = AtmosProblem(
-        init_state_prognostic = ics,
-        boundarycondition = (
+    if surface_flux == "prescribed"
+        energy_bc = PrescribedEnergyFlux((state, aux, t) -> LHF + SHF)
+        moisture_bc = PrescribedMoistureFlux((state, aux, t) -> moisture_flux)
+    elseif surface_flux == "bulk"
+        energy_bc = BulkFormulaEnergy(
+            (bl, state, aux, t, normPu_int) -> C_drag,
+            (bl, state, aux, t) ->
+                (surface_temperature_variation(bl, state, t), q_sfc),
+        )
+        moisture_bc = BulkFormulaMoisture(
+            (state, aux, t, normPu_int) -> C_drag,
+            (state, aux, t) -> q_sfc,
+        )
+    else
+        @warn @sprintf(
+            """
+%s: unrecognized surface flux; using 'prescribed'""",
+            surface_flux,
+        )
+    end
+
+    if moisture_model == "dry"
+        boundary_conditions = (
             AtmosBC(
                 momentum = Impenetrable(DragLaw(
                     # normPu_int is the internal horizontal speed
                     # P represents the projection onto the horizontal
                     (state, aux, t, normPu_int) -> (u_star / normPu_int)^2,
                 )),
-                energy = BulkFormulaEnergy(
-                    (state, aux, t, normPu_int) -> C_drag,
-                    (state, aux, t) -> (
-                        surface_temperature_variation(state, aux, t),
-                        q_sfc,
-                    ),
-                ),
-                moisture = BulkFormulaMoisture(
-                    (state, aux, t, normPu_int) -> C_drag,
-                    (state, aux, t) -> q_sfc,
-                ),
+                energy = energy_bc,
             ),
             AtmosBC(),
-        ),
+        )
+    else
+        boundary_conditions = (
+            AtmosBC(
+                momentum = Impenetrable(DragLaw(
+                    # normPu_int is the internal horizontal speed
+                    # P represents the projection onto the horizontal
+                    (state, aux, t, normPu_int) -> (u_star / normPu_int)^2,
+                )),
+                energy = energy_bc,
+                moisture = moisture_bc,
+            ),
+            AtmosBC(),
+        )
+    end
+
+    moisture_flux = FT(0)
+    problem = AtmosProblem(
+        init_state_prognostic = ics,
+        boundaryconditions = boundary_conditions,
     )
 
     # Assemble model components
     model = AtmosModel{FT}(
-        AtmosLESConfigType,
+        config_type,
         param_set;
         problem = problem,
         turbulence = SmagorinskyLilly{FT}(C_smag),
-        moisture = EquilMoist{FT}(; maxiter = 5, tolerance = FT(0.1)),
-        source = source,
+        moisture = moisture,
+        source = source_default,
+        turbconv = turbconv,
     )
 
-    # Assemble configuration
-    config = ClimateMachine.AtmosLESConfiguration(
-        "UnstableBoundaryLayer",
-        N,
-        resolution,
-        xmax,
-        ymax,
-        zmax,
-        param_set,
-        init_problem!,
-        solver_type = ode_solver_type,
-        model = model,
-    )
-    return config
+    return model
 end
 
 function config_diagnostics(driver_config)
@@ -315,75 +352,3 @@ function config_diagnostics(driver_config)
         core_dgngrp,
     ])
 end
-
-function main()
-    FT = Float64
-
-    # DG polynomial order
-    N = 4
-    # Domain resolution and size
-    Δh = FT(80)
-    Δv = FT(80)
-
-    resolution = (Δh, Δh, Δv)
-
-    # Prescribe domain parameters
-    xmax = FT(4800)
-    ymax = FT(4800)
-    zmax = FT(3200)
-
-    t0 = FT(0)
-
-    # Full simulation requires 16+ hours of simulated time 
-    timeend = FT(3600 * 0.1)
-    CFLmax = FT(0.4)
-
-    driver_config = config_problem(FT, N, resolution, xmax, ymax, zmax)
-    solver_config = ClimateMachine.SolverConfiguration(
-        t0,
-        timeend,
-        driver_config,
-        init_on_cpu = true,
-        Courant_number = CFLmax,
-    )
-    dgn_config = config_diagnostics(driver_config)
-
-    cbtmarfilter = GenericCallbacks.EveryXSimulationSteps(1) do
-        Filters.apply!(
-            solver_config.Q,
-            ("moisture.ρq_tot",),
-            solver_config.dg.grid,
-            TMARFilter(),
-        )
-        nothing
-    end
-
-    # State variable
-    Q = solver_config.Q
-    # Volume geometry information
-    vgeo = driver_config.grid.vgeo
-    M = vgeo[:, Grids._M, :]
-    # Unpack prognostic vars
-    ρ₀ = Q.ρ
-    ρe₀ = Q.ρe
-    # DG variable sums
-    Σρ₀ = sum(ρ₀ .* M)
-    Σρe₀ = sum(ρe₀ .* M)
-    cb_check_cons = GenericCallbacks.EveryXSimulationSteps(3000) do
-        Q = solver_config.Q
-        δρ = (sum(Q.ρ .* M) - Σρ₀) / Σρ₀
-        δρe = (sum(Q.ρe .* M) .- Σρe₀) ./ Σρe₀
-        @show (abs(δρ))
-        @show (abs(δρe))
-        nothing
-    end
-
-    result = ClimateMachine.invoke!(
-        solver_config;
-        diagnostics_config = dgn_config,
-        user_callbacks = (cbtmarfilter, cb_check_cons),
-        check_euclidean_distance = true,
-    )
-end
-
-main()

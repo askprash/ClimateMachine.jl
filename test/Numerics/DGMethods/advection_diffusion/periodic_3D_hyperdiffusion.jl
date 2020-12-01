@@ -24,26 +24,25 @@ if !@isdefined integration_testing
     )
 end
 
-include("hyperdiffusion_model.jl")
+include("advection_diffusion_model.jl")
 
-struct ConstantHyperDiffusion{dim, dir, FT} <: HyperDiffusionProblem
+struct ConstantHyperDiffusion{dim, dir, FT} <: AdvectionDiffusionProblem
     D::SMatrix{3, 3, FT, 9}
 end
 
-function nodal_init_state_auxiliary!(
-    balance_law::HyperDiffusion,
+function init_velocity_diffusion!(
+    problem::ConstantHyperDiffusion,
     aux::Vars,
-    tmp::Vars,
     geom::LocalGeometry,
-)
-    aux.D = balance_law.problem.D
+) where {n, α, β}
+    aux.hyperdiffusion.H = problem.D
 end
 
 function initial_condition!(
     problem::ConstantHyperDiffusion{dim, dir},
     state,
     aux,
-    x,
+    localgeo,
     t,
 ) where {dim, dir}
     @inbounds begin
@@ -58,6 +57,7 @@ function initial_condition!(
         elseif dir === VerticalDirection()
             c = k[dim]^2 * kD[dim, dim]
         end
+        x = localgeo.coord
         state.ρ = sin(dot(k[SOneTo(dim)], x[SOneTo(dim)])) * exp(-c * t)
     end
 end
@@ -125,7 +125,12 @@ function test_run(
     @info "time step" dt
     dt = outputtime / ceil(Int64, outputtime / dt)
 
-    model = HyperDiffusion{dim}(ConstantHyperDiffusion{dim, direction(), FT}(D))
+    model = AdvectionDiffusion{dim}(
+        ConstantHyperDiffusion{dim, direction(), FT}(D);
+        advection = false,
+        diffusion = false,
+        hyperdiffusion = true,
+    )
     dg = DGModel(
         model,
         grid,
@@ -276,11 +281,12 @@ let
                     outputtime = 1
 
                     @info (ArrayType, FT, dim, direction)
-                    vtkdir = output ?
+                    vtkdir =
+                        output ?
                         "vtk_hyperdiffusion" *
-                    "_poly$(polynomialorder)" *
-                    "_dim$(dim)_$(ArrayType)_$(FT)_$(direction)" *
-                    "_level$(l)" :
+                        "_poly$(polynomialorder)" *
+                        "_dim$(dim)_$(ArrayType)_$(FT)_$(direction)" *
+                        "_level$(l)" :
                         nothing
                     result[l] = test_run(
                         mpicomm,

@@ -49,27 +49,19 @@ const timeend = 10dt
 
 # ------------- Initial condition function ----------- #
 """
-@article{doi:10.1002/fld.1650170103,
-author = {Straka, J. M. and Wilhelmson, Robert B. and Wicker, Louis J. and Anderson, John R. and Droegemeier, Kelvin K.},
-title = {Numerical solutions of a non-linear density current: A benchmark solution and comparisons},
-journal = {International Journal for Numerical Methods in Fluids},
-volume = {17},
-number = {1},
-pages = {1-22},
-doi = {10.1002/fld.1650170103},
-url = {https://onlinelibrary.wiley.com/doi/abs/10.1002/fld.1650170103},
-eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1002/fld.1650170103},
-year = {1993}
-}
+# Reference
+
+See [Straka1993](@cite)
 """
 function Initialise_Density_Current!(
     problem,
     bl,
     state::Vars,
     aux::Vars,
-    (x1, x2, x3),
+    localgeo,
     t,
 )
+    (x1, x2, x3) = localgeo.coord
     FT = eltype(state)
     _R_d::FT = R_d(param_set)
     _grav::FT = grav(param_set)
@@ -131,7 +123,6 @@ function test_run(
         polynomialorder = polynomialorder,
     )
     # -------------- Define model ---------------------------------- #
-    source = Gravity()
     T_profile = DryAdiabaticProfile{FT}(param_set)
     model = AtmosModel{FT}(
         AtmosLESConfigType,
@@ -139,7 +130,7 @@ function test_run(
         init_state_prognostic = Initialise_Density_Current!,
         ref_state = HydrostaticState(T_profile),
         turbulence = AnisoMinDiss{FT}(1),
-        source = source,
+        source = (Gravity(),),
     )
     # -------------- Define DGModel --------------------------- #
     dg = DGModel(

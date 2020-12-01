@@ -29,6 +29,7 @@ import ...BalanceLaws:
     flux_second_order!,
     source!,
     wavespeed,
+    boundary_conditions,
     boundary_state!,
     update_auxiliary_state!,
     update_auxiliary_state_gradient!,
@@ -38,7 +39,11 @@ import ...BalanceLaws:
     reverse_indefinite_stack_integral!,
     reverse_integral_load_auxiliary_state!,
     reverse_integral_set_auxiliary_state!
-import ..Ocean: ocean_init_state!, ocean_init_aux!, ocean_boundary_state!
+import ..Ocean:
+    ocean_init_state!,
+    ocean_init_aux!,
+    ocean_boundary_state!,
+    _ocean_boundary_state!
 
 ×(a::SVector, b::SVector) = StaticArrays.cross(a, b)
 ⋅(a::SVector, b::SVector) = StaticArrays.dot(a, b)
@@ -147,8 +152,8 @@ end
 sets the initial value for state variables
 dispatches to ocean_init_state! which is defined in a problem file such as SimpleBoxProblem.jl
 """
-function init_state_prognostic!(m::HBModel, Q::Vars, A::Vars, coords, t)
-    return ocean_init_state!(m, m.problem, Q, A, coords, t)
+function init_state_prognostic!(m::HBModel, Q::Vars, A::Vars, localgeo, t)
+    return ocean_init_state!(m, m.problem, Q, A, localgeo, t)
 end
 
 """
@@ -709,16 +714,21 @@ function update_auxiliary_state_gradient!(
     # has a limited recursion depth for the types allowed.
     number_aux = number_states(m, Auxiliary())
     index_wz0 = varsindex(vars_state(m, Auxiliary(), FT), :wz0)
-    Nq, Nqk, _, _, nelemv, nelemh, nhorzrealelem, _ = basic_grid_info(dg)
+    info = basic_grid_info(dg)
+    Nq, Nqk = info.Nq, info.Nqk
+    nelemv, nelemh = info.nvertelem, info.nhorzelem
+    nrealelemh = info.nhorzrealelem
 
     # project w(z=0) down the stack
     data = reshape(A.data, Nq^2, Nqk, number_aux, nelemv, nelemh)
-    flat_wz0 = @view data[:, end:end, index_w, end:end, 1:nhorzrealelem]
-    boxy_wz0 = @view data[:, :, index_wz0, :, 1:nhorzrealelem]
+    flat_wz0 = @view data[:, end:end, index_w, end:end, 1:nrealelemh]
+    boxy_wz0 = @view data[:, :, index_wz0, :, 1:nrealelemh]
     boxy_wz0 .= flat_wz0
 
     return true
 end
+
+boundary_conditions(ocean::HBModel) = ocean.problem.boundary_conditions
 
 """
     boundary_state!(nf, ::HBModel, args...)
@@ -726,9 +736,8 @@ end
 applies boundary conditions for the hyperbolic fluxes
 dispatches to a function in OceanBoundaryConditions.jl based on bytype defined by a problem such as SimpleBoxProblem.jl
 """
-@inline function boundary_state!(nf, ocean::HBModel, args...)
-    boundary_conditions = ocean.problem.boundary_conditions
-    return ocean_boundary_state!(nf, boundary_conditions, ocean, args...)
+@inline function boundary_state!(nf, bc, ocean::HBModel, args...)
+    return _ocean_boundary_state!(nf, bc, ocean, args...)
 end
 
 """

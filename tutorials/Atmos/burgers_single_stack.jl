@@ -110,12 +110,14 @@ import ClimateMachine.BalanceLaws:
     compute_gradient_flux!,
     init_state_auxiliary!,
     init_state_prognostic!,
+    BoundaryCondition,
+    boundary_conditions,
     boundary_state!
 
 # ## Initialization
 
 # Define the float type (`Float64` or `Float32`)
-FT = Float64;
+const FT = Float64;
 # Initialize ClimateMachine for CPU.
 ClimateMachine.init(; disable_gpu = true);
 
@@ -245,7 +247,7 @@ function init_state_prognostic!(
     m::BurgersEquation,
     state::Vars,
     aux::Vars,
-    coords,
+    localgeo,
     t::Real,
 )
     z = aux.coord[3]
@@ -370,54 +372,66 @@ end;
 # Boundary conditions must be specified for all unknowns, both first-order and
 # second-order unknowns which have been reformulated.
 
+struct TopBC <: BoundaryCondition end;
+struct BottomBC <: BoundaryCondition end;
+boundary_conditions(::BurgersEquation) = (BottomBC(), TopBC());
+
 # The boundary conditions for `ρ`, `ρu` and `ρcT` (first order unknowns)
 function boundary_state!(
     nf,
+    bc::BottomBC,
     m::BurgersEquation,
     state⁺::Vars,
     aux⁺::Vars,
     n⁻,
-    state⁻::Vars,
-    aux⁻::Vars,
-    bctype,
-    t,
     _...,
 )
-    if bctype == 1 # bottom
-        state⁺.ρ = 1
-        state⁺.ρu = SVector(0, 0, 0)
-        state⁺.ρcT = state⁺.ρ * m.c * m.T_bottom
-    elseif bctype == 2 # top
-        state⁺.ρ = 1
-        state⁺.ρu = SVector(0, 0, 0)
-    end
+    state⁺.ρ = 1
+    state⁺.ρu = SVector(0, 0, 0)
+    state⁺.ρcT = state⁺.ρ * m.c * m.T_bottom
+end;
+function boundary_state!(
+    nf,
+    bc::TopBC,
+    m::BurgersEquation,
+    state⁺::Vars,
+    aux⁺::Vars,
+    n⁻,
+    _...,
+)
+    state⁺.ρ = 1
+    state⁺.ρu = SVector(0, 0, 0)
 end;
 
 # The boundary conditions for `ρ`, `ρu` and `ρcT` are specified here for
 # second-order unknowns
 function boundary_state!(
     nf,
+    bc::BottomBC,
     m::BurgersEquation,
     state⁺::Vars,
     diff⁺::Vars,
     aux⁺::Vars,
     n⁻,
-    state⁻::Vars,
-    diff⁻::Vars,
-    aux⁻::Vars,
-    bctype,
-    t,
     _...,
 )
-    if bctype == 1 # bottom
-        state⁺.ρ = 1
-        state⁺.ρu = SVector(0, 0, 0)
-        state⁺.ρcT = state⁺.ρ * m.c * m.T_bottom
-    elseif bctype == 2 # top
-        state⁺.ρ = 1
-        state⁺.ρu = SVector(0, 0, 0)
-        diff⁺.α∇ρcT = -n⁻ * m.flux_top
-    end
+    state⁺.ρ = 1
+    state⁺.ρu = SVector(0, 0, 0)
+    state⁺.ρcT = state⁺.ρ * m.c * m.T_bottom
+end;
+function boundary_state!(
+    nf,
+    bc::TopBC,
+    m::BurgersEquation,
+    state⁺::Vars,
+    diff⁺::Vars,
+    aux⁺::Vars,
+    n⁻,
+    _...,
+)
+    state⁺.ρ = 1
+    state⁺.ρu = SVector(0, 0, 0)
+    diff⁺.α∇ρcT = -n⁻ * m.flux_top
 end;
 
 # # Spatial discretization
@@ -480,7 +494,7 @@ mkpath(output_dir);
 z_scale = 100 # convert from meters to cm
 z_key = "z"
 z_label = "z [cm]"
-z = get_z(driver_config.grid, z_scale)
+z = get_z(driver_config.grid; z_scale = z_scale)
 state_vars = get_vars_from_nodal_stack(
     driver_config.grid,
     solver_config.Q,
@@ -494,30 +508,30 @@ time_data = FT[0]                                      # store time data
 # Generate plots of initial conditions for the southwest nodal stack
 export_plot(
     z,
+    time_data,
     state_data,
     ("ρcT",),
-    joinpath(output_dir, "initial_condition_T_nodal.png"),
+    joinpath(output_dir, "initial_condition_T_nodal.png");
     xlabel = "ρcT at southwest node",
     ylabel = z_label,
-    time_data = time_data,
 );
 export_plot(
     z,
+    time_data,
     state_data,
     ("ρu[1]",),
-    joinpath(output_dir, "initial_condition_u_nodal.png"),
+    joinpath(output_dir, "initial_condition_u_nodal.png");
     xlabel = "ρu at southwest node",
     ylabel = z_label,
-    time_data = time_data,
 );
 export_plot(
     z,
+    time_data,
     state_data,
     ("ρu[2]",),
-    joinpath(output_dir, "initial_condition_v_nodal.png"),
+    joinpath(output_dir, "initial_condition_v_nodal.png");
     xlabel = "ρv at southwest node",
     ylabel = z_label,
-    time_data = time_data,
 );
 
 # ![](initial_condition_T_nodal.png)
@@ -544,21 +558,21 @@ data_var = Dict[state_vars_var]
 
 export_plot(
     z,
+    time_data,
     data_avg,
     ("ρu[1]",),
     joinpath(output_dir, "initial_condition_avg_u.png");
     xlabel = "Horizontal mean of ρu",
     ylabel = z_label,
-    time_data = time_data,
 );
 export_plot(
     z,
+    time_data,
     data_var,
     ("ρu[1]",),
-    joinpath(output_dir, "initial_condition_variance_u.png"),
+    joinpath(output_dir, "initial_condition_variance_u.png");
     xlabel = "Horizontal variance of ρu",
     ylabel = z_label,
-    time_data = time_data,
 );
 
 # ![](initial_condition_avg_u.png)
@@ -628,48 +642,48 @@ ClimateMachine.invoke!(solver_config; user_callbacks = (callback,))
 # `ρu` for the southwest nodal stack:
 export_plot(
     z,
+    time_data,
     data_avg,
     ("ρu[1]"),
-    joinpath(output_dir, "solution_vs_time_u_avg.png"),
+    joinpath(output_dir, "solution_vs_time_u_avg.png");
     xlabel = "Horizontal mean of ρu",
     ylabel = z_label,
-    time_data = time_data,
 );
 export_plot(
     z,
+    time_data,
     data_var,
     ("ρu[1]"),
-    joinpath(output_dir, "variance_vs_time_u.png"),
+    joinpath(output_dir, "variance_vs_time_u.png");
     xlabel = "Horizontal variance of ρu",
     ylabel = z_label,
-    time_data = time_data,
 );
 export_plot(
     z,
+    time_data,
     data_avg,
     ("ρcT"),
-    joinpath(output_dir, "solution_vs_time_T_avg.png"),
+    joinpath(output_dir, "solution_vs_time_T_avg.png");
     xlabel = "Horizontal mean of ρcT",
     ylabel = z_label,
-    time_data = time_data,
 );
 export_plot(
     z,
+    time_data,
     data_var,
     ("ρcT"),
-    joinpath(output_dir, "variance_vs_time_T.png"),
+    joinpath(output_dir, "variance_vs_time_T.png");
     xlabel = "Horizontal variance of ρcT",
     ylabel = z_label,
-    time_data = time_data,
 );
 export_plot(
     z,
+    time_data,
     data_nodal,
     ("ρu[1]"),
-    joinpath(output_dir, "solution_vs_time_u_nodal.png"),
+    joinpath(output_dir, "solution_vs_time_u_nodal.png");
     xlabel = "ρu at southwest node",
     ylabel = z_label,
-    time_data = time_data,
 );
 # ![](solution_vs_time_u_avg.png)
 # ![](variance_vs_time_u.png)

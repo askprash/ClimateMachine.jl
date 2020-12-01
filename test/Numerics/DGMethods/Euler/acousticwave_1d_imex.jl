@@ -16,11 +16,7 @@ using ClimateMachine.VTK: writevtk, writepvtu
 using ClimateMachine.GenericCallbacks:
     EveryXWallTimeSeconds, EveryXSimulationSteps
 using ClimateMachine.Thermodynamics:
-    air_density,
-    soundspeed_air,
-    internal_energy,
-    PhaseDry_pT,
-    PhasePartition
+    air_density, soundspeed_air, internal_energy, PhaseDry_pT, PhasePartition
 using ClimateMachine.TemperatureProfiles: IsothermalProfile
 using ClimateMachine.Atmos:
     AtmosModel,
@@ -125,7 +121,7 @@ function test_run(
         ref_state = HydrostaticState(T_profile),
         turbulence = ConstantDynamicViscosity(FT(0)),
         moisture = DryModel(),
-        source = Gravity(),
+        source = (Gravity(),),
         tracers = NTracers{length(δ_χ), FT}(δ_χ),
     )
     linearmodel = AtmosAcousticGravityLinearModel(model)
@@ -281,7 +277,7 @@ Base.@kwdef struct AcousticWaveSetup{FT}
     nv::Int = 1
 end
 
-function (setup::AcousticWaveSetup)(problem, bl, state, aux, coords, t)
+function (setup::AcousticWaveSetup)(problem, bl, state, aux, localgeo, t)
     # callable to set initial conditions
     FT = eltype(state)
 

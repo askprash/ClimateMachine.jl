@@ -87,7 +87,8 @@ end
     return ocean_boundary_state!(m, CoastlineNoSlip(), x...)
 end
 
-function ocean_init_state!(p::SimpleBox, Q, A, coords, t)
+function ocean_init_state!(p::SimpleBox, Q, A, localgeo, t)
+    coords = localgeo.coord
     @inbounds y = coords[2]
     @inbounds z = coords[3]
     @inbounds H = p.H
@@ -129,11 +130,12 @@ function ocean_init_aux!(m::BarotropicModel, P::SimpleBox, A, geom)
     return nothing
 end
 
-function main()
+function main(::Type{FT}) where {FT}
     mpicomm = MPI.COMM_WORLD
 
     ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
-    loglevel = ll == "DEBUG" ? Logging.Debug :
+    loglevel =
+        ll == "DEBUG" ? Logging.Debug :
         ll == "WARN" ? Logging.Warn :
         ll == "ERROR" ? Logging.Error : Logging.Info
     logger_stream = MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull
@@ -455,4 +457,4 @@ const τₒ = 1e-1
 const λʳ = 10 // 86400 # m/s
 const θᴱ = 10    # deg.C
 
-main()
+main(FT)

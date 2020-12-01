@@ -45,12 +45,12 @@ let
                     ξ1 ≥ FT(1 // 2) && (ξ1 = FT(1 // 2) + 2 * (ξ1 - FT(1 // 2)))
                     if dim == 2
                         ξ2 ≥ FT(3 // 2) &&
-                        (ξ2 = FT(3 // 2) + 2 * (ξ2 - FT(3 // 2)))
+                            (ξ2 = FT(3 // 2) + 2 * (ξ2 - FT(3 // 2)))
                     elseif dim == 3
                         ξ2 ≥ FT(1 // 2) &&
-                        (ξ2 = FT(1 // 2) + 2 * (ξ2 - FT(1 // 2)))
+                            (ξ2 = FT(1 // 2) + 2 * (ξ2 - FT(1 // 2)))
                         ξ3 ≥ FT(3 // 2) &&
-                        (ξ3 = FT(3 // 2) + 2 * (ξ3 - FT(3 // 2)))
+                            (ξ3 = FT(3 // 2) + 2 * (ξ3 - FT(3 // 2)))
                     end
                     (ξ1, ξ2, ξ3)
                 end
@@ -70,7 +70,8 @@ let
                 #   writepvtu(testname, filename.(0:MPI.Comm_size(mpicomm)-1), (), FT)
                 # end
 
-                ξ = referencepoints(grid)
+                # XXX: Needs updating for multiple polynomial orders
+                ξ = referencepoints(grid)[1]
                 hmnd = (ξ[2] - ξ[1]) / (2Neh)
                 vmnd = (ξ[2] - ξ[1]) / (2Nev)
 

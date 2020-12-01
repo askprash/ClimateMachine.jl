@@ -23,7 +23,7 @@ struct HeldSuarezProblem{BC, ISP, ISA, WP, BS, MP} <: AbstractAtmosProblem
     moisture_profile::MP
 end
 function HeldSuarezProblem(;
-    boundarycondition = (AtmosBC(), AtmosBC()),
+    boundaryconditions = (AtmosBC(), AtmosBC()),
     perturbation = nothing,
     base_state = nothing,
     moisture_profile = nothing,
@@ -52,5 +52,4 @@ end
 
 problem_name(::HeldSuarezProblem) = "HeldSuarez"
 
-setup_source(::HeldSuarezProblem) =
-    (Gravity(), Coriolis(), held_suarez_forcing!)
+setup_source(::HeldSuarezProblem) = (Gravity(), Coriolis(), HeldSuarezForcing())
