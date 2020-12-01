@@ -9,14 +9,13 @@ using ClimateMachine.Ocean.Domains
     for FT in (Float64, Float32)
         domain = RectangularDomain(
             FT,
-            elements = (16, 24, 1),
-            polynomialorder = 4,
+            Ne = (16, 24, 1),
+            Np = 4,
             x = (0, π),
             y = (0, 1.1),
             z = (-1, 0),
             array_type = Array,
             periodicity = (false, false, false),
-            boundary = ((1, 1), (1, 1), (2, 3)),
         )
 
         @test eltype(domain) == FT

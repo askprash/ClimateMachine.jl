@@ -13,8 +13,8 @@ using ClimateMachine.Ocean:
 @testset "$(@__FILE__)" begin
 
     domain = RectangularDomain(
-        elements = (1, 1, 1),
-        polynomialorder = 4,
+        Ne = (1, 1, 1),
+        Np = 4,
         x = (-1, 1),
         y = (-1, 1),
         z = (-1, 0),
