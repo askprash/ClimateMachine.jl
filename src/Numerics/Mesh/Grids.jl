@@ -56,7 +56,7 @@ function min_node_distance(
 end
 
 # {{{
-const _nvgeo = 16
+const _nvgeo = 17
 const _ξ1x1,
 _ξ2x1,
 _ξ3x1,
@@ -72,7 +72,8 @@ _MH,
 _x1,
 _x2,
 _x3,
-_JcV = 1:_nvgeo
+_JcV,
+_Δx3 = 1:_nvgeo
 const vgeoid = (
     ξ1x1id = _ξ1x1,
     ξ2x1id = _ξ2x1,
@@ -90,6 +91,7 @@ const vgeoid = (
     x2id = _x2,
     x3id = _x3,
     JcVid = _JcV,
+    Δx3id = _Δx3,
 )
 # JcV is the vertical line integral Jacobian
 # The MH terms are for integrating over a plane.
@@ -655,6 +657,33 @@ function computegeometry_fvm(elemtocoord, D, ξ, ω, meshwarp)
             num_vgeo_handled += 1
         end
 
+        # Compute Δx3, the radial grid size for finite volume method, 
+        # if vertical finite volume is applied in the last dimension
+        if Nq[dim] == 1
+            avg_den = 2 .^ (sum(Nq[1:dim] .== 1) - 1)
+            avg_ind = ntuple(i -> Colon(), dim - 1)
+            vgeo[:, _Δx3, :] =
+                sum(
+                    sqrt.(
+                        (
+                            vgeo_N1_flds[_x1][avg_ind..., 2, :] .-
+                            vgeo_N1_flds[_x1][avg_ind..., 1, :]
+                        ) .^ 2 +
+                        (
+                            vgeo_N1_flds[_x2][avg_ind..., 2, :] .-
+                            vgeo_N1_flds[_x2][avg_ind..., 1, :]
+                        ) .^ 2 +
+                        (
+                            vgeo_N1_flds[_x3][avg_ind..., 2, :] .-
+                            vgeo_N1_flds[_x3][avg_ind..., 1, :]
+                        ) .^ 2,
+                    ),
+                    dims = findall(Nq[1:(dim - 1)] .== 1),
+                )[:] / avg_den
+        end
+        num_vgeo_handled += 1
+
+
         # compute MH and JvC
         horizontal_vertical_metrics(vgeo, Nq, ω)
         num_vgeo_handled += 2
@@ -764,7 +793,7 @@ function computegeometry(elemtocoord, D, ξ, ω, meshwarp)
         ξ1x1, ξ2x1, ξ3x1, ξ1x2, ξ2x2, ξ3x2, ξ1x3, ξ2x3, ξ3x3,
         MJ, MJI, MHJH,
         x1, x2, x3,
-        JcV,
+        JcV, Δx3,
        #! format: on
     ) = ntuple(j -> (@view vgeo[:, j, :]), _nvgeo)
     J = similar(x1)
