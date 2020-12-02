@@ -55,7 +55,7 @@ x₀ = domain.L.x / 4  # Gaussian origin (m, recall that x ∈ [0, Lx])
 Gaussian(x, L) = exp(-x^2 / (2 * L^2))
 
 ## Geostrophic ``y``-velocity: f V = g ∂_x η
-vᵍ(x, y, z) = - U * (x - x₀) / L * Gaussian(x - x₀, L)
+vᵍ(x, y, z) = -U * (x - x₀) / L * Gaussian(x - x₀, L)
 
 ## Geostrophic surface displacement
 ηᵍ(x, y, z) = a * Gaussian(x - x₀, L)
@@ -189,10 +189,7 @@ plot_maker = EveryXSimulationSteps(plot_every) do
         ylabel = "η (m)",
     )
 
-    push!(
-        movie_plots,
-        (u = u_plot, η = η_plot, time = current_time(model)),
-    )
+    push!(movie_plots, (u = u_plot, η = η_plot, time = current_time(model)))
 
     return nothing
 end

@@ -131,11 +131,7 @@ function ocean_init_aux!(m::BarotropicModel, P::SimpleBox, A, geom)
     return nothing
 end
 
-<<<<<<< HEAD
-function main(::Type{FT}) where {FT}
-=======
 function main(; restart = 0)
->>>>>>> 5945e01ef... Add restart feature and fix initial vtk output
     mpicomm = MPI.COMM_WORLD
 
     ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
@@ -191,7 +187,8 @@ function main(; restart = 0)
         dt_slow = runTime / n_chkp
         n_chkp = 0
     end
-    n_outp = t_outp > 0 ? floor(Int64, t_outp / dt_slow) :
+    n_outp =
+        t_outp > 0 ? floor(Int64, t_outp / dt_slow) :
         ceil(Int64, runTime / dt_slow)
     ivdc_dt = numImplSteps > 0 ? dt_slow / FT(numImplSteps) : dt_slow
 

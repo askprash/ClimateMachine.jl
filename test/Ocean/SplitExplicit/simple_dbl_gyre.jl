@@ -144,7 +144,8 @@ function main(; restart = 0)
     mpicomm = MPI.COMM_WORLD
 
     ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
-    loglevel = ll == "DEBUG" ? Logging.Debug :
+    loglevel =
+        ll == "DEBUG" ? Logging.Debug :
         ll == "WARN" ? Logging.Warn :
         ll == "ERROR" ? Logging.Error : Logging.Info
     logger_stream = MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull
@@ -193,7 +194,8 @@ function main(; restart = 0)
         dt_slow = runTime / n_chkp
         n_chkp = 0
     end
-    n_outp = t_outp > 0 ? floor(Int64, t_outp / dt_slow) :
+    n_outp =
+        t_outp > 0 ? floor(Int64, t_outp / dt_slow) :
         ceil(Int64, runTime / dt_slow)
     ivdc_dt = numImplSteps > 0 ? dt_slow / FT(numImplSteps) : dt_slow
 

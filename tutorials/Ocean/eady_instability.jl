@@ -147,8 +147,8 @@ free_surface = OceanBC(Penetrable(FreeSlip()), Insulating())
 ## Geostrophic jet:
 λ = L / π # Sinusoidal jet width (m)
 
-U(y, z) = + α * sin(y / λ) * (z + H)
-B(y, z) = + α * f * λ * cos(y / λ) + N² * z
+U(y, z) = +α * sin(y / λ) * (z + H)
+B(y, z) = +α * f * λ * cos(y / λ) + N² * z
 h(y, z) = α * f * λ * H / 2g * cos(y / λ)
 
 # Geostrophic mode-3 perturbation:
@@ -163,7 +163,7 @@ y₀ = L / 2
 ũ(x, y) = (ky * tan(ky * y) + (y - y₀)^2 / width^2) * ψ̃(x, y)
 
 # ṽ = ∂x ψ̃
-ṽ(x, y) = - kx * tan(kx * x) * ψ̃(x, y)
+ṽ(x, y) = -kx * tan(kx * x) * ψ̃(x, y)
 
 a = 0.01
 uᵢ(x, y, z) = U(y, z) + a * ũ(x, y)
@@ -183,9 +183,8 @@ model = Ocean.HydrostaticBoussinesqSuperModel(
     # array_type = CuArray,
     buoyancy = (αᵀ = 1 / g,),
     coriolis = (f₀ = f, β = 0),
-    turbulence_closure = (νʰ = νh, κʰ = κh,
-                          νᶻ = νz, κᶻ = νz),
-    rusanov_wave_speeds = (cʰ = sqrt(g*H), cᶻ = 1e-2),
+    turbulence_closure = (νʰ = νh, κʰ = κh, νᶻ = νz, κᶻ = νz),
+    rusanov_wave_speeds = (cʰ = sqrt(g * H), cᶻ = 1e-2),
     boundary_tags = ((0, 0), (1, 1), (1, 2)),
     boundary_conditions = (no_slip, free_surface),
 )
@@ -229,10 +228,12 @@ data_fetcher = EveryXSimulationTime(days) do
 
     push!(
         fetched_states,
-        (u = u_assembly,
-         v = v_assembly,
-         θ = θ_assembly,
-         time = current_time(model)),
+        (
+            u = u_assembly,
+            v = v_assembly,
+            θ = θ_assembly,
+            time = current_time(model),
+        ),
     )
 end
 
@@ -252,15 +253,20 @@ end
 # Finally, we make an animation of the evolving shear instability.
 
 animation = @animate for (i, state) in enumerate(fetched_states)
-
     local u
     local v
     local θ
 
     @info "Plotting frame $i of $(length(fetched_states))..."
 
-    kwargs = (xlim = domain.x, ylim = domain.y, linewidth = 0, aspectratio = 1,
-              xlabel = "x (m)", ylabel = "y (m)")
+    kwargs = (
+        xlim = domain.x,
+        ylim = domain.y,
+        linewidth = 0,
+        aspectratio = 1,
+        xlabel = "x (m)",
+        ylabel = "y (m)",
+    )
 
     u = state.u[:, :, end]
     v = state.v[:, :, end]
@@ -270,8 +276,8 @@ animation = @animate for (i, state) in enumerate(fetched_states)
     θmin = minimum(θ)
     θmax = maximum(θ)
 
-    ulevels = range(-ulim, ulim, length=31)
-    θlevels = range(θmin, θmax, length=31)
+    ulevels = range(-ulim, ulim, length = 31)
+    θlevels = range(θmin, θmax, length = 31)
 
     u_plot = heatmap(
         x,
@@ -280,7 +286,7 @@ animation = @animate for (i, state) in enumerate(fetched_states)
         #levels = ulevels,
         color = :balance,
         clim = (-ulim, ulim),
-        kwargs...
+        kwargs...,
     )
 
     v_plot = contourf(
@@ -290,7 +296,7 @@ animation = @animate for (i, state) in enumerate(fetched_states)
         #levels = ulevels,
         color = :balance,
         clim = (-ulim, ulim),
-        kwargs...
+        kwargs...,
     )
 
     θ_plot = heatmap(
@@ -300,17 +306,27 @@ animation = @animate for (i, state) in enumerate(fetched_states)
         #levels = θlevels,
         color = :thermal,
         clim = (θmin, θmax),
-        kwargs...
+        kwargs...,
     )
 
-    u_title = @sprintf("surface u (m s⁻¹) at t = %.2f days", state.time / days)
-    v_title = @sprintf("surface v (m s⁻¹) at t = %.2f days", state.time / days)
-    θ_title = @sprintf("surface b (m s⁻²) at t = %.2f days", state.time / days)
+    u_title =
+        @sprintf("surface u (m s⁻¹) at t = %.2f days", state.time / days)
+    v_title =
+        @sprintf("surface v (m s⁻¹) at t = %.2f days", state.time / days)
+    θ_title =
+        @sprintf("surface b (m s⁻²) at t = %.2f days", state.time / days)
 
-    plot(u_plot, v_plot, θ_plot, title = [u_title v_title θ_title],
-         layout=(1, 3), size = (1500, 400))
+    plot(
+        u_plot,
+        v_plot,
+        θ_plot,
+        title = [u_title v_title θ_title],
+        layout = (1, 3),
+        size = (1500, 400),
+    )
 end
 
-name = @sprintf("eady_dg_Np%d_Nh%d_Nz%d_αf%.2e_ν%.2e.gif", Np, Nh, Nz, α/f, νh)
+name =
+    @sprintf("eady_dg_Np%d_Nh%d_Nz%d_αf%.2e_ν%.2e.gif", Np, Nh, Nz, α / f, νh)
 
 gif(animation, name, fps = 8)
