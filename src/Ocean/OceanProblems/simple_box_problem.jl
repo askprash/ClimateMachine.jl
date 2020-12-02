@@ -149,10 +149,11 @@ function ocean_init_state!(
     p::SimpleBox,
     Q,
     A,
-    localgeo,
+    local_geometry,
     t,
 )
-    coords = localgeo.coord
+    coords = local_geometry.coord
+
     k = (2π / p.Lˣ, 2π / p.Lʸ, 2π / p.H)
     ν = viscosity(m)
 
@@ -179,9 +180,12 @@ function ocean_init_state!(
     p::SimpleBox,
     Q,
     A,
-    localgeo,
+    local_geometry,
     t,
 )
+
+    coords = local_geometry.coord
+
     k = (2π / p.Lˣ, 2π / p.Lʸ, 2π / p.H)
     ν = (m.νʰ, m.νʰ, m.νᶻ)
 

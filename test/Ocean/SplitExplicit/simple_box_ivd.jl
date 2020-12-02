@@ -89,7 +89,8 @@ end
     return ocean_boundary_state!(m, CoastlineNoSlip(), x...)
 end
 
-function ocean_init_state!(p::SimpleBox, Q, A, coords, t)
+function ocean_init_state!(p::SimpleBox, Q, A, local_geometry, t)
+    coords = local_geometry.coord
     @inbounds y = coords[2]
     @inbounds z = coords[3]
     @inbounds H = p.H
