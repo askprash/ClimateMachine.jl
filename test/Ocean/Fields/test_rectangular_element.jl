@@ -2,8 +2,7 @@ using ClimateMachine
 
 ClimateMachine.init()
 
-using ClimateMachine.Ocean.Fields:
-    RectangularElement, assemble
+using ClimateMachine.Ocean.Fields: RectangularElement, assemble
 
 @testset "$(@__FILE__)" begin
 
@@ -25,9 +24,9 @@ using ClimateMachine.Ocean.Fields:
     @test minimum(abs, element) == minimum(abs, data)
     @test element[1, 1, 1] == data[1, 1, 1]
 
-    east_element  = RectangularElement(2 .* data, x .+ x[end, 1, 1], y, z)
+    east_element = RectangularElement(2 .* data, x .+ x[end, 1, 1], y, z)
     north_element = RectangularElement(3 .* data, x, y .+ y[1, end, 1], z)
-    top_element   = RectangularElement(4 .* data, x, y, z .+ z[1, 1, end])
+    top_element = RectangularElement(4 .* data, x, y, z .+ z[1, 1, end])
 
     west_east = assemble(Val(1), element, east_element)
     south_north = assemble(Val(2), element, north_element)

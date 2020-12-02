@@ -27,7 +27,14 @@ include("homogeneous_box.jl")
 
 include("shallow_water_initial_states.jl")
 
-function ocean_init_state!(m::SWModel, p::HomogeneousBox, Q, A, local_geometry, t)
+function ocean_init_state!(
+    m::SWModel,
+    p::HomogeneousBox,
+    Q,
+    A,
+    local_geometry,
+    t,
+)
     coords = local_geometry.coord
     if t == 0
         null_init_state!(p, m.turbulence, Q, A, coords, 0)
