@@ -14,7 +14,6 @@ using ClimateMachine.Ocean.Domains
             x = (0, π),
             y = (0, 1.1),
             z = (-1, 0),
-            array_type = Array,
             periodicity = (false, false, false),
         )
 

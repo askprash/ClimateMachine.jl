@@ -83,7 +83,7 @@ end
 
 kinematic_stress(problem, y, ρ₀) = @SVector [0, 0] # fallback for generic problems
 kinematic_stress(problem, y, ρ₀, ::Nothing) = kinematic_stress(problem, y, ρ₀)
-kinematic_stress(problem, y, ρ₀, drag) = drag.stress(y)
+kinematic_stress(problem, y, ρ₀, stress) = stress(y)
 
 """
     Insulating() :: TemperatureBC

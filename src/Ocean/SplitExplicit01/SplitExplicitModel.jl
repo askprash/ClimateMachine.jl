@@ -74,7 +74,6 @@ import ...SystemSolvers: BatchedGeneralizedMinimalResidual, linearsolve!
 ∘(a::SVector, b::SVector) = StaticArrays.dot(a, b)
 
 abstract type AbstractOceanModel <: BalanceLaw end
-abstract type AbstractOceanProblem end
 
 function ocean_init_aux! end
 function ocean_init_state! end

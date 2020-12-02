@@ -3,7 +3,7 @@ using ClimateMachine
 ClimateMachine.init()
 
 using ClimateMachine.Ocean.Fields:
-    RectangularElement, x_assemble, y_assemble, z_assemble, assemble
+    RectangularElement, assemble
 
 @testset "$(@__FILE__)" begin
 
@@ -12,9 +12,9 @@ using ClimateMachine.Ocean.Fields:
     Nz = 5
 
     data = rand(Nx, Ny, Nz)
-    x = range(0.0, 1.0, length = Nx)
-    y = range(0.0, 1.1, length = Ny)
-    z = range(0.0, 1.2, length = Nz)
+    x = repeat(range(0.0, 1.0, length = Nx), 1, Ny, Nz)
+    y = repeat(range(0.0, 1.1, length = Ny), Nx, 1, Nz)
+    z = repeat(range(0.0, 1.2, length = Nz), Nx, Ny, 1)
 
     element = RectangularElement(data, x, y, z)
 
@@ -25,27 +25,28 @@ using ClimateMachine.Ocean.Fields:
     @test minimum(abs, element) == minimum(abs, data)
     @test element[1, 1, 1] == data[1, 1, 1]
 
-    east_element = RectangularElement(2 .* data, x .+ x[end], y, z)
-    north_element = RectangularElement(3 .* data, x, y .+ y[end], z)
-    top_element = RectangularElement(4 .* data, x, y, z .+ z[end])
+    east_element  = RectangularElement(2 .* data, x .+ x[end, 1, 1], y, z)
+    north_element = RectangularElement(3 .* data, x, y .+ y[1, end, 1], z)
+    top_element   = RectangularElement(4 .* data, x, y, z .+ z[1, 1, end])
 
-    west_east = x_assemble(element, east_element)
-    south_north = y_assemble(element, north_element)
-    bottom_top = z_assemble(element, top_element)
+    west_east = assemble(Val(1), element, east_element)
+    south_north = assemble(Val(2), element, north_element)
+    bottom_top = assemble(Val(3), element, top_element)
 
-    @test west_east.x[1] == x[1]
-    @test west_east.x[end] == 2 * x[end]
+    @test west_east.x[1, 1, 1] == x[1, 1, 1]
+    @test west_east.x[end, 1, 1] == 2 * x[end, 1, 1]
 
-    @test south_north.y[1] == y[1]
-    @test south_north.y[end] == 2 * y[end]
+    @test south_north.y[1, 1, 1] == y[1, 1, 1]
+    @test south_north.y[1, end, 1] == 2 * y[1, end, 1]
 
-    @test bottom_top.z[1] == z[1]
-    @test bottom_top.z[end] == 2 * z[end]
+    @test bottom_top.z[1, 1, 1] == z[1, 1, 1]
+    @test bottom_top.z[1, 1, end] == 2 * z[1, 1, end]
 
     northeast_element =
-        RectangularElement(5 .* data, x .+ x[end], y .+ y[end], z)
+        RectangularElement(5 .* data, x .+ x[end, 1, 1], y .+ y[1, end, 1], z)
 
-    # Transpoed...
+    # Remember that matrix literals are transposed, so "northeast"
+    # is the bottom right corner (for example).
     four_elements = [
         element north_element
         east_element northeast_element
@@ -55,7 +56,7 @@ using ClimateMachine.Ocean.Fields:
 
     four_way = assemble(four_elements)
 
-    @test four_way.x[end] == west_east.x[end]
-    @test four_way.y[end] == south_north.y[end]
-    @test four_way.z[end] == z[end]
+    @test four_way.x[end, 1, 1] == west_east.x[end, 1, 1]
+    @test four_way.y[1, end, 1] == south_north.y[1, end, 1]
+    @test four_way.z[1, 1, end] == z[1, 1, end]
 end

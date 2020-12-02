@@ -8,7 +8,7 @@ using CLIMAParameters: AbstractEarthParameterSet
 struct DefaultParameters <: AbstractEarthParameterSet end
 
 using ClimateMachine.Ocean:
-    HydrostaticBoussinesqSuperModel, current_time, steps, Δt
+    HydrostaticBoussinesqSuperModel, current_time, current_step, Δt
 
 @testset "$(@__FILE__)" begin
 
@@ -28,6 +28,6 @@ using ClimateMachine.Ocean:
 
     @test model isa HydrostaticBoussinesqSuperModel
     @test Δt(model) == 0.1
-    @test steps(model) == 0
+    @test current_step(model) == 0
     @test current_time(model) == 0.0
 end

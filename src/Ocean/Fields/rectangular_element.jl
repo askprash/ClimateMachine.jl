@@ -52,6 +52,9 @@ function RectangularElement(
     return RectangularElement(data, x, y, z, element_index)
 end
 
+# Constructor for index-less elements
+RectangularElement(data, x, y, z) = RectangularElement(data, x, y, z, nothing)
+
 Base.eltype(::RectangularElement) = eltype(elem.data)
 
 Base.size(element::RectangularElement) = size(element.data)
