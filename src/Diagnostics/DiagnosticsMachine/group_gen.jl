@@ -209,6 +209,7 @@ function generate_init_vars(config_type, dvars)
     end
 
     quote
+        # TODO: add code to filter this based on what's actually in `bl`.
         OrderedDict($(Expr(:tuple, varslst...))...)
     end
 end
@@ -277,36 +278,67 @@ end
 
 # Generate code to create the necessary arrays for the diagnostics
 # variables.
-function generate_create_vars_arrays(name, dvtype_dvars_map)
+function generate_create_vars_arrays(name, config_type, dvtype_dvars_map)
+    CT = getfield(ConfigTypes, config_type)
     cva_exs = []
     for (dvtype, dvlst) in dvtype_dvars_map
         dvt_short = uppers_in(split(String(Symbol(dvtype)), ".")[end])
         arr_name = Symbol("vars_", dvt_short, "_array")
         varsfunname = Symbol("vars_", name, "_", dvt_short)
+        npoints = dv_dg_points_range(CT(), dvtype)
+        nelems = dv_dg_elems_range(CT(), dvtype)
         cva_ex = quote
             nvars = varsize($(varsfunname)(bl, FT))
-            $(arr_name) = Array{FT}(undef, npoints, nvars, nrealelem)
+            $(arr_name) = Array{FT}(undef, $(npoints), nvars, $(nelems))
         end
         push!(cva_exs, cva_ex)
     end
-    println(cva_exs)
     return Expr(:block, (cva_exs...))
 end
 
 # Generate calls to the implementations for the `DiagnosticVar`s in this
 # group and store the results.
-function generate_collect_calls(name, config_type, dvars) end
+function generate_collect_calls(name, config_type, dvtype_dvars_map)
+    CT = getfield(ConfigTypes, config_type)
+    cc_exs = []
+    for (dvtype, dvlst) in dvtype_dvars_map
+        dvt_short = uppers_in(split(String(Symbol(dvtype)), ".")[end])
+        vars_name = Symbol("vars_", dvt_short)
+        for dvar in dvlst
+            # TODO: call_ex = 
+            cc_ex = quote
+                $(dv_op(
+                    CT(),
+                    dvtype,
+                    $(vars_name).$(dv_name(CT(), dvar)),
+                    MH * $(call_ex)
+                ))
+            end
+            push!(cc_exs, cc_ex)
+        end
+    end
 
-function generate_dg_collection(name, dvtype_dvars_map)
+    return Expr(:block, (cc_exs...))
+end
+
+# Generate the nested loops to traverse the DG grid within which we extract
+# the various states and then generate the individual collection calls.
+function generate_dg_collection(name, config_type, dvtype_dvars_map)
+    CT = getfield(ConfigTypes, config_type)
+    gv_exs = []
     for (dvtype, dvlst) in dvtype_dvars_map
         dvt_short = uppers_in(split(String(Symbol(dvtype)), ".")[end])
         vars_name = Symbol("vars_", dvt_short)
         arr_name = Symbol("vars_", dvt_short, "_array")
         varsfunname = Symbol("vars_", name, "_", dvt_short)
-        getvars_ex = quote
-            $(vars_name) = Vars{$(varsfunname)(bl, FT)}(view($(arr_name), k, :, ev)) # TODO: get `k` and `ev` from `dv_<something>`
+        pt = dv_dg_points_index(CT(), dvtype)
+        elem = dv_dg_elems_index(CT(), dvtype)
+        gv_ex = quote
+            $(vars_name) = Vars{$(varsfunname)(bl, FT)}(
+                view($(arr_name), $(pt), :, $(elem))
+            )
         end
-        push!(cva_exs, cva_ex)
+        push!(gv_exs, gv_ex)
     end
     quote
         for eh in 1:nhorzelem, ev in 1:nvertelem
@@ -327,7 +359,7 @@ function generate_dg_collection(name, dvtype_dvars_map)
                     ),
                     extract_state(bl, aux_data, ijk, e, Auxiliary()),
                 )
-                vars = Vars{grp_vars}(view(vars_array, ijk, :, e))
+                $(gv_exs...)
                 $(generate_collect_calls(name, config_type, dvars_dg))
             end
         end
@@ -410,10 +442,10 @@ function generate_collect_fun(
         function $collect_name(dgngrp, curr_time)
             $(generate_common_defs())
             $(generate_array_copies())
-            $(generate_create_vars_arrays(name, dvtype_dvars_map))
+            $(generate_create_vars_arrays(name, config_type, dvtype_dvars_map))
 
             # Traverse the DG grid and collect diagnostics as needed.
-            $(generate_dg_collection(name, dvtype_dvars_map))
+            $(generate_dg_collection(name, config_type, dvtype_dvars_map))
 
             #=
             # Interpolate and accumulate if needed.

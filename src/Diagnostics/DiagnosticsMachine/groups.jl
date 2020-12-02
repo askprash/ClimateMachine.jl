@@ -131,11 +131,13 @@ macro diagnostics_group(
 
     # Partition the diagnostic variables by type.
     dvtype_dvars_map = Dict{DataType, Array{DiagnosticVar, 1}}()
+    dvar_info_map = Dict{DiagnosticVar, Tuple}()
     for dvar in dvars
         push!(
             get!(dvtype_dvars_map, supertype(typeof(dvar)), DiagnosticVar[]),
             dvar,
         )
+        dvar_info_map[dvar] = ()
     end
 
     gen_params = (
