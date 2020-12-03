@@ -1745,7 +1745,7 @@ end
 end
 
 @doc """
-    function interface_gradients!(
+    function dgsem_interface_gradients!(
         balance_law::BalanceLaw,
         ::Val{dim},
         ::Val{polyorder},
@@ -1778,8 +1778,8 @@ This kernel computes the interface gradient term: M⁻¹ LᵀMf(G* - G),
 where M is the mass matrix, Mf is the face mass matrix, L is an interpolator
 from volume to face, G is the
 auxiliary gradient flux, and G* is the associated numerical flux.
-""" interface_gradients!
-@kernel function interface_gradients!(
+""" dgsem_interface_gradients!
+@kernel function dgsem_interface_gradients!(
     balance_law::BalanceLaw,
     ::Val{info},
     direction,
@@ -2082,6 +2082,90 @@ auxiliary gradient flux, and G* is the associated numerical flux.
         end
         # Need to wait after even faces to avoid race conditions
         @synchronize(f % 2 == 0)
+    end
+end
+
+@kernel function vert_fvm_interface_gradients!(
+    balance_law::BalanceLaw,
+    ::Val{info},
+    ::Val{nvertelem},
+    ::Val{periodicstack},
+    ::VerticalDirection,
+    state_prognostic,
+    state_gradient_flux,
+    state_auxiliary,
+    vgeo,
+    sgeo,
+    t,
+    elemtobndy,
+    elems,
+) where {info, nvertelem, periodicstack}
+    @uniform begin
+        dim = info.dim
+        FT = eltype(state_prognostic)
+        num_state_prognostic = number_states(balance_law, Prognostic())
+        ngradstate = number_states(balance_law, Gradient())
+        num_state_gradient_flux = number_states(balance_law, GradientFlux())
+        num_state_auxiliary = number_states(balance_law, Auxiliary())
+        nface = info.nface
+        Np = info.Np
+        faces = (nface - 1, nface)
+
+        ngradtransformstate = num_state_prognostic
+
+        local_state_prognostic =
+            ntuple(_ -> MArray{Tuple{ngradtransformstate}, FT}(undef), 3)
+        local_state_auxiliary =
+            ntuple(_ -> MArray{Tuple{num_state_auxiliary}, FT}(undef), 3)
+        local_transform⁻ = ntuple(_ -> MArray{Tuple{ngradstate}, FT}(undef), 3)
+    end
+
+    # Element index
+    eI = @index(Group, Linear)
+    # Index of a quadrature point on a face
+    n = @index(Local, Linear)
+
+    @inbounds begin
+        e = elems[eI]
+
+        # Figure out the element above and below e
+        e_dn, bc_dn = if e > 1
+            e - 1, 0
+        elseif periodicstack
+            e + nvertelem - 1, 0
+        else
+            e, elemtobndy[faces[1], e]
+        end
+
+        e_up, bc_up = if e < nvertelem
+            e + 1, 0
+        elseif periodicstack
+            e - nvertelem + 1, 0
+        else
+            e, elemtobndy[faces[2], e]
+        end
+
+        e = (e_dn, e, e_up)
+
+        # Get the mass matrix for each of the elements
+        M = ntuple(k -> vgeo[n, _M, e[k]], 3)
+
+        # load data for each of the elements
+        @unroll for k in 1:3
+            @unroll for s in 1:num_state_prognostic
+                local_state_prognostic[k][s] = state_prognostic[n, s, e[k]]
+            end
+        end
+
+        @unroll for k in 1:3
+            @unroll for s in 1:num_state_auxiliary
+                local_state_auxiliary[k][s] = state_auxiliary[n, s, e[k]]
+            end
+        end
+
+        # TODO: Transform data
+        # TODO: Compute difference
+        # TODO: Transform data
     end
 end
 
