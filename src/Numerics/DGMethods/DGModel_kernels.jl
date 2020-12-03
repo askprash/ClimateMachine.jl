@@ -2155,9 +2155,10 @@ end
 
     @inbounds begin
         e = elems[eI]
+        eV = mod1(e, nvertelem)
 
         # Figure out the element above and below e
-        e_dn, bc_dn = if e > 1
+        e_dn, bc_dn = if eV > 1
             e - 1, 0
         elseif periodicstack
             e + nvertelem - 1, 0
@@ -2165,7 +2166,7 @@ end
             e, elemtobndy[faces[1], e]
         end
 
-        e_up, bc_up = if e < nvertelem
+        e_up, bc_up = if eV < nvertelem
             e + 1, 0
         elseif periodicstack
             e - nvertelem + 1, 0
@@ -2208,7 +2209,8 @@ end
             end
         end
 
-        # transform data
+        # transform to the gradient argument (i.e., the values we take the
+        # gradient of)
         @unroll for k in 1:3
             fill!(l_grad_arg[k], -zero(eltype(l_grad_arg[k])))
             compute_gradient_argument!(
@@ -2243,6 +2245,7 @@ end
                     end
                 end
             else
+                # Call DG boundary condition treatment to get the boundary flux
                 bcs = boundary_conditions(balance_law)
                 # TODO: there is probably a better way to unroll this loop
                 Base.Cartesian.@nif 7 d -> bctag[f] == d <= length(bcs) d ->
@@ -2266,6 +2269,7 @@ end
                             vars(Auxiliary)(local_state_auxiliary_bottom1),
                         )
                     end
+
                 @unroll for s in 1:ngradstate
                     l_nG[s] += vMI * sM[f] * l_nG_bc[s]
                 end
