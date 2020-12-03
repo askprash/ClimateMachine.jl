@@ -66,7 +66,7 @@ HydrostaticBoussinesqSuperModel
 ```
 
 ```@meta
-CurrentModule = ClimateMachine.JLD2Writers
+CurrentModule = ClimateMachine.Ocean.JLD2Writers
 ```
 
 ```@docs
