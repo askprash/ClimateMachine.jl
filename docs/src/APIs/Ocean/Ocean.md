@@ -53,8 +53,6 @@ CurrentModule = ClimateMachine.Ocean.OceanProblems
 SimpleBox
 HomogeneousBox
 OceanGyre
-InitialConditions
-InitialValueProblem
 ```
 
 ## Other (development)
