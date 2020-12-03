@@ -223,8 +223,7 @@ function parse_commandline(
         help = "interval at which to output acoustic, advective, and diffusive Courant numbers"
         metavar = "<interval>"
         arg_type = String
-        default =
-            get_setting(:adapt_timestep, defaults, global_defaults)
+        default = get_setting(:adapt_timestep, defaults, global_defaults)
         "--checkpoint"
         help = "interval at which to create a checkpoint"
         metavar = "<interval>"
@@ -673,10 +672,7 @@ function invoke!(
     end
 
     # Timestep adapter
-    cb_adp = Callbacks.adapt_timestep(
-        Settings.adapt_timestep,
-        solver_config,
-    )
+    cb_adp = Callbacks.adapt_timestep(Settings.adapt_timestep, solver_config)
     if !isnothing(cb_adp)
         callbacks = (callbacks..., cb_adp)
     end

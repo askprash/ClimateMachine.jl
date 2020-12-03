@@ -56,7 +56,7 @@ and should not be assumed to be initialized to any value.
 Return `Bool` for whether this backward Euler solver can be updated. default is
 `false`.
 """
-Δt_is_adjustable(::AbstractBackwardEulerSolver) = true#false
+Δt_is_adjustable(::AbstractBackwardEulerSolver) = false
 
 """
     update_backward_Euler_solver!(::AbstractBackwardEulerSolver, α)
@@ -94,7 +94,7 @@ struct LinearBackwardEulerSolver{LS}
     preconditioner_update_freq::Int
     LinearBackwardEulerSolver(
         solver;
-        isadjustable = true, #false,
+        isadjustable = false,
         preconditioner_update_freq = -1,
     ) = new{typeof(solver)}(solver, isadjustable, preconditioner_update_freq)
 end
@@ -120,7 +120,7 @@ mutable struct LinBESolver{FT, F, LS} <: AbstractBackwardEulerSolver
     factors::Any
 end
 
-Δt_is_adjustable(lin::LinBESolver) = true#lin.isadjustable
+Δt_is_adjustable(lin::LinBESolver) = lin.isadjustable
 
 function setup_backward_Euler_solver(
     lin::LinearBackwardEulerSolver,
@@ -213,7 +213,7 @@ struct NonLinearBackwardEulerSolver{NLS}
     preconditioner_update_freq::Int
     function NonLinearBackwardEulerSolver(
         nlsolver;
-        isadjustable = true,#false,
+        isadjustable = false,
         preconditioner_update_freq = -1,
     )
         NLS = typeof(nlsolver)
@@ -248,7 +248,7 @@ mutable struct NonLinBESolver{FT, F, NLS} <: AbstractBackwardEulerSolver
 
 end
 
-Δt_is_adjustable(nlsolver::NonLinBESolver) = true#nlsolver.isadjustable
+Δt_is_adjustable(nlsolver::NonLinBESolver) = nlsolver.isadjustable
 
 """
     setup_backward_Euler_solver(solver::NonLinearBackwardEulerSolver, Q, α, tendency!)

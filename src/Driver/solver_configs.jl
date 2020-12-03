@@ -247,9 +247,9 @@ function SolverConfiguration(
         numberofsteps,
         init_args,
         solver,
-	ode_solver_type,
-	diffdir,
-	Courant_number
+        ode_solver_type,
+        diffdir,
+        Courant_number,
     )
 end
 
