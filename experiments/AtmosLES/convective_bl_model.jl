@@ -138,7 +138,7 @@ end
 """
   Initial Condition for ConvectiveBoundaryLayer LES
 """
-function init_convective_bl!(problem, bl, state, aux, localgeo, t)
+function init_problem!(problem, bl, state, aux, localgeo, t)
     (x, y, z) = localgeo.coord
 
     # Problem floating point precision
@@ -210,6 +210,14 @@ function convective_bl_model(
     turbconv = NoTurbConv(),
     moisture_model = "dry",
 ) where {FT}
+
+    ics = init_problem!     # Initial conditions
+
+    C_smag = FT(0.23)     # Smagorinsky coefficient
+    C_drag = FT(0.001)    # Momentum exchange coefficient
+    z_sponge = FT(2560)     # Start of sponge layer
+
+    α_max = FT(0.75)       # Strength of sponge layer (timescale)
 
     γ = 2                  # Strength of sponge layer (exponent)
     u_geostrophic = FT(4)        # Eastward relaxation speed
