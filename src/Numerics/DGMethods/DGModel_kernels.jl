@@ -8,7 +8,8 @@ using .NumericalFluxes:
     numerical_boundary_flux_first_order!,
     numerical_boundary_flux_second_order!,
     numerical_boundary_flux_divergence!,
-    numerical_boundary_flux_higher_order!
+    numerical_boundary_flux_higher_order!,
+    CentralNumericalFluxGradient
 
 import .NumericalFluxes:
     numerical_flux_first_order!, numerical_boundary_flux_first_order!
@@ -2101,6 +2102,7 @@ end
     elems,
 ) where {info, nvertelem, periodicstack}
     @uniform begin
+
         dim = info.dim
         FT = eltype(state_prognostic)
         num_state_prognostic = number_states(balance_law, Prognostic())
@@ -2111,13 +2113,39 @@ end
         Np = info.Np
         faces = (nface - 1, nface)
 
-        ngradtransformstate = num_state_prognostic
-
+        # Storage for the prognostic state for e-1, e, e+1
         local_state_prognostic =
-            ntuple(_ -> MArray{Tuple{ngradtransformstate}, FT}(undef), 3)
+            ntuple(_ -> MArray{Tuple{num_state_prognostic}, FT}(undef), 3)
+
+        # Storage for the auxiliary state for e-1, e, e+1
         local_state_auxiliary =
             ntuple(_ -> MArray{Tuple{num_state_auxiliary}, FT}(undef), 3)
-        local_transform⁻ = ntuple(_ -> MArray{Tuple{ngradstate}, FT}(undef), 3)
+
+        # Storage for the transform state for e-1, e, e+1
+        # e.g., the state we take the gradient of
+        l_grad_arg = ntuple(_ -> MArray{Tuple{ngradstate}, FT}(undef), 3)
+
+        # Storage for the contribution to the gradient from these faces
+        l_nG = MArray{Tuple{3, ngradstate}, FT}(undef)
+
+        l_nG_bc = MArray{Tuple{3, ngradstate}, FT}(undef)
+
+        # Storage for the state gradient flux locally
+        local_state_gradient_flux =
+            MArray{Tuple{num_state_gradient_flux}, FT}(undef)
+
+        # Convenience wrappers
+        vars(s) = Vars{vars_state(balance_law, s(), FT)}
+        grad(s) = Grad{vars_state(balance_law, s(), FT)}
+
+        local_state_prognostic_bottom1 =
+            MArray{Tuple{num_state_prognostic}, FT}(undef)
+        local_state_auxiliary_bottom1 =
+            MArray{Tuple{num_state_auxiliary}, FT}(undef)
+
+        # XXX: will revisit this later for FVM
+        fill!(local_state_prognostic_bottom1, NaN)
+        fill!(local_state_auxiliary_bottom1, NaN)
     end
 
     # Element index
@@ -2145,27 +2173,121 @@ end
             e, elemtobndy[faces[2], e]
         end
 
+        bctag = (bc_dn, bc_up)
+
         e = (e_dn, e, e_up)
+
+        # Load the normal vectors and surface mass matrix on the faces
+        normal_vector = ntuple(
+            k -> SVector(
+                sgeo[_n1, n, faces[k], e[2]],
+                sgeo[_n2, n, faces[k], e[2]],
+                sgeo[_n3, n, faces[k], e[2]],
+            ),
+            2,
+        )
+        sM = ntuple(k -> sgeo[_sM, n, faces[k], e[2]], 2)
+
+        # volume mass same on both faces
+        vMI = sgeo[_vMI, n, faces[1], e[2]]
 
         # Get the mass matrix for each of the elements
         M = ntuple(k -> vgeo[n, _M, e[k]], 3)
 
-        # load data for each of the elements
+        # load prognostic data
         @unroll for k in 1:3
             @unroll for s in 1:num_state_prognostic
                 local_state_prognostic[k][s] = state_prognostic[n, s, e[k]]
             end
         end
 
+        # load auxiliary data
         @unroll for k in 1:3
             @unroll for s in 1:num_state_auxiliary
                 local_state_auxiliary[k][s] = state_auxiliary[n, s, e[k]]
             end
         end
 
-        # TODO: Transform data
-        # TODO: Compute difference
-        # TODO: Transform data
+        # transform data
+        @unroll for k in 1:3
+            fill!(l_grad_arg[k], -zero(eltype(l_grad_arg[k])))
+            compute_gradient_argument!(
+                balance_law,
+                vars(Gradient)(l_grad_arg[k]),
+                vars(Prognostic)(local_state_prognostic[k]),
+                vars(Auxiliary)(local_state_auxiliary[k]),
+                t,
+            )
+        end
+
+        # Compute the surface integral contribution from these two faces:
+        #   M⁻¹ Lᵀ Mf n̂ G*
+        # Since this is FVM we do not subtract the interior state
+        fill!(l_nG, -zero(eltype(l_nG)))
+        @unroll for f in 1:2
+            if bctag[f] == 0
+                @unroll for s in 1:ngradstate
+                    # Interpolate to the face (using the mass matrix for the
+                    # interpolation weights) -- "the gradient numerical flux"
+                    G =
+                        (
+                            M[f] * l_grad_arg[f + 1][s] +
+                            M[f + 1] * l_grad_arg[f][s]
+                        ) / (M[f] + M[f + 1])
+
+                    # Compute the surface integral for this component and face
+                    # multiplied by the normal to get the rotation to the
+                    # physical space
+                    @unroll for i in 1:3
+                        l_nG[i, s] += vMI * sM[f] * normal_vector[f][i] * G
+                    end
+                end
+            else
+                bcs = boundary_conditions(balance_law)
+                # TODO: there is probably a better way to unroll this loop
+                Base.Cartesian.@nif 7 d -> bctag[f] == d <= length(bcs) d ->
+                    begin
+                        bc = bcs[d]
+                        # Computes G* incorporating boundary conditions
+                        numerical_boundary_flux_gradient!(
+                            CentralNumericalFluxGradient(),
+                            bc,
+                            balance_law,
+                            l_nG_bc,
+                            SVector(normal_vector[f]),
+                            vars(Gradient)(l_grad_arg[2]),
+                            vars(Prognostic)(local_state_prognostic[2]),
+                            vars(Auxiliary)(local_state_auxiliary[2]),
+                            vars(Gradient)(l_grad_arg[2f - 1]),
+                            vars(Prognostic)(local_state_prognostic[2f - 1]),
+                            vars(Auxiliary)(local_state_auxiliary[2f - 1]),
+                            t,
+                            vars(Prognostic)(local_state_prognostic_bottom1),
+                            vars(Auxiliary)(local_state_auxiliary_bottom1),
+                        )
+                    end
+                @unroll for s in 1:ngradstate
+                    l_nG[s] += vMI * sM[f] * l_nG_bc[s]
+                end
+            end
+        end
+
+        # Applies linear transformation of gradients to the diffusive variables
+        # for storage
+        compute_gradient_flux!(
+            balance_law,
+            vars(GradientFlux)(local_state_gradient_flux),
+            grad(Gradient)(l_nG),
+            vars(Prognostic)(local_state_prognostic[2]),
+            vars(Auxiliary)(local_state_auxiliary[2]),
+            t,
+        )
+
+        # This is the surface integral evaluated discretely
+        # M^(-1) Mf G*
+        @unroll for s in 1:num_state_gradient_flux
+            state_gradient_flux[n, s, e[2]] += local_state_gradient_flux[s]
+        end
     end
 end
 
