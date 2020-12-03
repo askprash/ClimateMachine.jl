@@ -53,9 +53,45 @@ CurrentModule = ClimateMachine.Ocean.OceanProblems
 SimpleBox
 HomogeneousBox
 OceanGyre
+InitialConditions
+InitialValueProblem
 ```
 
 ## Other (development)
+
+```@meta
+CurrentModule = ClimateMachine.Ocean
+```
+
+```@docs
+HydrostaticBoussinesqSuperModel
+```
+
+```@meta
+CurrentModule = ClimateMachine.JLD2Writers
+```
+
+```@docs
+JLD2Writer
+```
+
+```@meta
+CurrentModule = ClimateMachine.Ocean.Domains
+```
+
+```@docs
+RectangularDomain
+```
+
+```@meta
+CurrentModule = ClimateMachine.Ocean.Fields
+```
+
+```@docs
+SpectralElementField
+RectangularElement
+assemble
+```
 
 ```@meta
 CurrentModule = ClimateMachine.Ocean.SplitExplicit01
