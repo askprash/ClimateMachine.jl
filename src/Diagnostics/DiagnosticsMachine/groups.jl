@@ -151,9 +151,9 @@ macro diagnostics_group(
     )
 
     vars_funs = esc(prewalk(unblock, generate_vars_funs(gen_params...)))
-    println(vars_funs)
+    #println(vars_funs)
     init_fun = esc(prewalk(unblock, generate_init_fun(gen_params...)))
-    println(init_fun)
+    #println(init_fun)
     collect_fun = esc(prewalk(unblock, generate_collect_fun(gen_params...)))
     println(collect_fun)
     fini_fun = esc(prewalk(unblock, generate_fini_fun(gen_params...)))

@@ -307,16 +307,17 @@ function generate_collect_calls(name, config_type, dvtype_dvars_map)
         for dvar in dvlst
             # TODO: call_ex = 
             cc_ex = quote
-                $(dv_op(
-                    CT(),
-                    dvtype,
-                    $(vars_name).$(dv_name(CT(), dvar)),
-                    MH * $(call_ex)
-                ))
+                dv_op(
+                    $(CT()),
+                    $(dvtype),
+                    getproperty($(vars_name), $(Symbol(dv_name(CT(), dvar)))),
+                    MH,
+                )
             end
             push!(cc_exs, cc_ex)
         end
     end
+    println(cc_exs)
 
     return Expr(:block, (cc_exs...))
 end
@@ -360,7 +361,7 @@ function generate_dg_collection(name, config_type, dvtype_dvars_map)
                     extract_state(bl, aux_data, ijk, e, Auxiliary()),
                 )
                 $(gv_exs...)
-                $(generate_collect_calls(name, config_type, dvars_dg))
+                $(generate_collect_calls(name, config_type, dvtype_dvars_map))
             end
         end
     end
