@@ -87,3 +87,9 @@ ClimateMachine.Atmos.CreateClouds
 ClimateMachine.Atmos.WarmRain_1M
 ClimateMachine.Atmos.RainSnow_1M
 ```
+
+## Large-scale forcing
+```@docs
+ClimateMachine.Atmos.NoLSForcing
+ClimateMachine.Atmos.HadGEMVertical
+``` 

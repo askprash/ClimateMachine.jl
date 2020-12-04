@@ -3,6 +3,8 @@ abstract type PrecipitationModel end
 
 export NoPrecipitation, RainModel, RainSnowModel
 
+eq_tends(pv::PV, m::PrecipitationModel, ::Flux{O}) where {PV, O} = ()
+
 using ..Microphysics
 
 vars_state(::PrecipitationModel, ::AbstractStateType, FT) = @vars()
@@ -51,6 +53,54 @@ function compute_gradient_argument!(
 ) end
 
 source!(::PrecipitationModel, args...) = nothing
+
+"""
+    PrecipitationFlux{PV <: Union{Rain, Snow}} <: TendencyDef{Flux{FirstOrder}, PV}
+
+Computes the precipitation flux as a sum of air velocity and terminal velocity
+multiplied by the advected variable.
+"""
+struct PrecipitationFlux{PV <: Union{Rain, Snow}} <:
+    TendencyDef{Flux{FirstOrder}, PV} end
+
+PrecipitationFlux() = (PrecipitationFlux{Rain()}, PrecipitationFlux{Snow()})
+
+function flux(::PrecipitationFlux{Rain}, m, state, aux, t, ts, direction)
+    FT = eltype(state)
+    u = state.ρu / state.ρ
+    q_rai = state.precipitation.ρq_rai / state.ρ
+
+    v_term_rai::FT = FT(0)
+    if q_rai > FT(0)
+        v_term_rai = terminal_velocity(
+            m.param_set,
+            m.param_set.microphys.rai,
+            state.ρ,
+            q_rai,
+        )
+    end
+
+    k̂ = vertical_unit_vector(m, aux)
+    return state.precipitation.ρq_rai * (u - k̂ * v_term_rai)
+end
+function flux(::PrecipitationFlux{Snow}, m, state, aux, t, ts, direction)
+    FT = eltype(state)
+    u = state.ρu / state.ρ
+    q_sno = state.precipitation.ρq_sno / state.ρ
+
+    v_term_sno::FT = FT(0)
+    if q_sno > FT(0)
+        v_term_sno = terminal_velocity(
+            m.param_set,
+            m.param_set.microphys.sno,
+            state.ρ,
+            q_sno,
+        )
+    end
+
+    k̂ = vertical_unit_vector(m, aux)
+    return state.precipitation.ρq_sno * (u - k̂ * v_term_sno)
+end
 
 """
     NoPrecipitation <: PrecipitationModel
@@ -110,22 +160,9 @@ function flux_first_order!(
     ts,
     direction,
 )
-    FT = eltype(state)
-    u = state.ρu / state.ρ
-    q_rai = state.precipitation.ρq_rai / state.ρ
-
-    v_term_rai::FT = FT(0)
-    if q_rai > FT(0)
-        v_term_rai = terminal_velocity(
-            atmos.param_set,
-            atmos.param_set.microphys.rai,
-            state.ρ,
-            q_rai,
-        )
-    end
-
-    k̂ = vertical_unit_vector(atmos, aux)
-    flux.precipitation.ρq_rai += state.precipitation.ρq_rai * (u - k̂ * v_term_rai)
+    tend = Flux{FirstOrder}()
+    args = (atmos, state, aux, t, ts, direction)
+    flux.precipitation.ρq_rai = Σfluxes(eq_tends(Rain(), atmos, tend), args...)
 end
 
 function flux_second_order!(
@@ -215,33 +252,10 @@ function flux_first_order!(
     ts,
     direction,
 )
-    FT = eltype(state)
-    u = state.ρu / state.ρ
-    q_rai = state.precipitation.ρq_rai / state.ρ
-    q_sno = state.precipitation.ρq_sno / state.ρ
-
-    v_term_rai::FT = FT(0)
-    if q_rai > FT(0)
-        v_term_rai = terminal_velocity(
-            atmos.param_set,
-            atmos.param_set.microphys.rai,
-            state.ρ,
-            q_rai,
-        )
-    end
-    v_term_sno::FT = FT(0)
-    if q_sno > FT(0)
-        v_term_sno = terminal_velocity(
-            atmos.param_set,
-            atmos.param_set.microphys.sno,
-            state.ρ,
-            q_sno,
-        )
-    end
-
-    k̂ = vertical_unit_vector(atmos, aux)
-    flux.precipitation.ρq_rai += state.precipitation.ρq_rai * (u - k̂ * v_term_rai)
-    flux.precipitation.ρq_sno += state.precipitation.ρq_sno * (u - k̂ * v_term_sno)
+    tend = Flux{FirstOrder}()
+    args = (atmos, state, aux, t, ts, direction)
+    flux.precipitation.ρq_rai = Σfluxes(eq_tends(Rain(), atmos, tend), args...)
+    flux.precipitation.ρq_sno = Σfluxes(eq_tends(Snow(), atmos, tend), args...)
 end
 
 function flux_second_order!(
@@ -281,3 +295,15 @@ function source!(
     source.precipitation.ρq_sno =
         Σsources(eq_tends(Snow(), atmos, tend), args...)
 end
+
+#####
+##### Tendency specifications
+#####
+
+eq_tends(pv::PV, ::RainModel, ::Flux{FirstOrder}) where {PV <: Rain} =
+    (PrecipitationFlux{PV}(),)
+
+eq_tends(pv::PV, ::RainSnowModel, ::Flux{FirstOrder}) where {PV <: Rain} =
+    (PrecipitationFlux{PV}(),)
+eq_tends(pv::PV, ::RainSnowModel, ::Flux{FirstOrder}) where {PV <: Snow} =
+    (PrecipitationFlux{PV}(),)

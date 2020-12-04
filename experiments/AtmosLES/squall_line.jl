@@ -23,9 +23,6 @@ using CLIMAParameters
 using CLIMAParameters.Planet
 using CLIMAParameters.Atmos.Microphysics
 
-import ClimateMachine.Atmos: atmos_source!
-atmos_source!(::RainSnow_1M, args...) = nothing
-
 struct LiquidParameterSet <: AbstractLiquidParameterSet end
 struct IceParameterSet <: AbstractIceParameterSet end
 struct RainParameterSet <: AbstractRainParameterSet end
