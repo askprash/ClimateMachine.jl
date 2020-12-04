@@ -242,11 +242,9 @@ function main(::Type{FT}) where {FT}
     push!(dons_arr, dons)
     push!(time_data, gettime(solver_config.solver))
 
-    return solver_config, dons_arr, time_data, state_types, model
+    return solver_config, dons_arr, time_data, state_types
 end
 
-solver_config, dons_arr, time_data, state_types, model = main(Float64)
+solver_config, dons_arr, time_data, state_types = main(Float64)
 
 include(joinpath(@__DIR__, "report_mse.jl"))
-
-nothing
