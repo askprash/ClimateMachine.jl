@@ -10,6 +10,9 @@ using ClimateMachine.ODESolvers
 using LinearAlgebra
 using Printf
 using Test
+import ClimateMachine.VTK: writevtk, writepvtu
+import ClimateMachine.GenericCallbacks:
+    EveryXWallTimeSeconds, EveryXSimulationSteps
 
 if !@isdefined integration_testing
     const integration_testing = parse(
@@ -74,7 +77,44 @@ function Neumann_data!(
     ∇state.ρ = hcat(∇ρ1, ∇ρ2)
 end
 
-function test_run(mpicomm, dim, polynomialorders, level, ArrayType, FT)
+function do_output(mpicomm, vtkdir, vtkstep, dgfvm, Q, Qe, model, testname)
+    ## name of the file that this MPI rank will write
+    filename = @sprintf(
+        "%s/%s_mpirank%04d_step%04d",
+        vtkdir,
+        testname,
+        MPI.Comm_rank(mpicomm),
+        vtkstep
+    )
+
+    statenames = flattenednames(vars_state(model, Prognostic(), eltype(Q)))
+    exactnames = statenames .* "_exact"
+
+    writevtk(filename, Q, dgfvm, statenames, Qe, exactnames)
+
+    ## generate the pvtu file for these vtk files
+    if MPI.Comm_rank(mpicomm) == 0
+        ## name of the pvtu file
+        pvtuprefix = @sprintf("%s/%s_step%04d", vtkdir, testname, vtkstep)
+
+        ## name of each of the ranks vtk files
+        prefixes = ntuple(MPI.Comm_size(mpicomm)) do i
+            @sprintf("%s_mpirank%04d_step%04d", testname, i - 1, vtkstep)
+        end
+
+        writepvtu(
+            pvtuprefix,
+            prefixes,
+            (statenames..., exactnames...),
+            eltype(Q),
+        )
+
+        @info "Done writing VTK: $pvtuprefix"
+    end
+end
+
+
+function test_run(mpicomm, dim, polynomialorders, level, ArrayType, FT, vtkdir)
 
     n_hd =
         dim == 2 ? SVector{3, FT}(1, 0, 0) :
@@ -103,6 +143,7 @@ function test_run(mpicomm, dim, polynomialorders, level, ArrayType, FT)
 
     dt = (α / 4) / (Ne * maximum(polynomialorders)^2)
     timeend = 1
+    outputtime = timeend / 10
     @info "time step" dt
 
     @info @sprintf """Test parameters:
@@ -144,7 +185,65 @@ function test_run(mpicomm, dim, polynomialorders, level, ArrayType, FT)
     norm(Q₀) = %.16e""" eng0[1]
 
     solver = LSRK54CarpenterKennedy(dgfvm, Q; dt = dt, t0 = 0)
-    solve!(Q, solver; timeend = timeend)
+
+    # Set up the information callback
+    starttime = Ref(Dates.now())
+    cbinfo = EveryXWallTimeSeconds(60, mpicomm) do (s = false)
+        if s
+            starttime[] = Dates.now()
+        else
+            energy = norm(Q)
+            @info @sprintf(
+                """Update
+                simtime = %.16e
+                runtime = %s
+                norm(Q) = %.16e""",
+                gettime(solver),
+                Dates.format(
+                    convert(Dates.DateTime, Dates.now() - starttime[]),
+                    Dates.dateformat"HH:MM:SS",
+                ),
+                energy
+            )
+        end
+    end
+    callbacks = (cbinfo,)
+    if ~isnothing(vtkdir)
+        # create vtk dir
+        mkpath(vtkdir)
+
+        vtkstep = 0
+        # output initial step
+        do_output(
+            mpicomm,
+            vtkdir,
+            vtkstep,
+            dgfvm,
+            Q,
+            Q,
+            model,
+            "advection_diffusion",
+        )
+
+        # setup the output callback
+        cbvtk = EveryXSimulationSteps(floor(outputtime / dt)) do
+            vtkstep += 1
+            Qe = init_ode_state(dgfvm, gettime(solver))
+            do_output(
+                mpicomm,
+                vtkdir,
+                vtkstep,
+                dgfvm,
+                Q,
+                Qe,
+                model,
+                "advection_diffusion",
+            )
+        end
+        callbacks = (callbacks..., cbvtk)
+    end
+
+    solve!(Q, solver; timeend = timeend, callbacks = callbacks)
 
     # Reference solution
     engf = norm(Q, dims = (1, 3))
@@ -193,10 +292,18 @@ function main()
                 integration_testing ||
                 ClimateMachine.Settings.integration_testing ?
                 (FT == Float64 ? 4 : 3) : 1
+            numlevels = 4
             for dim in 2:3
                 polynomialorders = (4, 0)
                 result = Dict()
                 for level in 1:numlevels
+                    vtkdir =
+                        true || output ?
+                        "vtk_advection" *
+                        "_poly$(polynomialorders)" *
+                        "_dim$(dim)_$(ArrayType)_$(FT)" *
+                        "_level$(level)" :
+                        nothing
                     result[level] = test_run(
                         mpicomm,
                         dim,
@@ -204,6 +311,7 @@ function main()
                         level,
                         ArrayType,
                         FT,
+                        vtkdir,
                     )
                     #JK horiz_poly = polynomialorders[1]
                     #JK vert_poly = polynomialorders[2]
