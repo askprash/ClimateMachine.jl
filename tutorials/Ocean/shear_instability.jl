@@ -66,8 +66,7 @@ fetched_states = []
 start_time = time_ns()
 
 data_fetcher = EveryXSimulationTime(1) do
-
-    # Print a helpful message
+    ## Print a helpful message
     step = @sprintf("Step: %d", current_step(model))
     time = @sprintf("time: %.2f min", current_time(model) / 60)
     max_u = @sprintf("max|u|: %.6f", maximum(abs, u))
