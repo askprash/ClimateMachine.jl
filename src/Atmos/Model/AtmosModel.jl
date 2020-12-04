@@ -174,6 +174,8 @@ function AtmosModel{FT}(
     data_config::DC = nothing,
 ) where {FT <: AbstractFloat, ISP, PR, O, RS, T, TC, HD, VS, M, P, R, S, TR, DC}
 
+    @info(source)
+
     @assert !any(isa.(source, Tuple))
 
     atmos = (

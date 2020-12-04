@@ -15,28 +15,27 @@ filter_source(pv::PV, m, s::Gravity{PV}) where {PV <: Momentum} = s
 filter_source(pv::PV, m, s::GeostrophicForcing{PV}) where {PV <: Momentum} = s
 filter_source(pv::PV, m, s::Coriolis{PV}) where {PV <: Momentum} = s
 filter_source(pv::PV, m, s::RayleighSponge{PV}) where {PV <: Momentum} = s
+
 filter_source(pv::PV, m, s::CreateClouds{PV}) where {PV <: LiquidMoisture} = s
 filter_source(pv::PV, m, s::CreateClouds{PV}) where {PV <: IceMoisture} = s
+
 filter_source(
     pv::PV,
     m,
     s::RemovePrecipitation{PV},
 ) where {PV <: Union{Mass, Energy, TotalMoisture}} = s
 
-filter_source(
-    pv::PV,
-    ::NonEquilMoist,
-    s::Rain_1M{PV},
-) where {PV <: LiquidMoisture} = s
-filter_source(
-    pv::PV,
-    ::MoistureModel,
-    s::Rain_1M{PV},
-) where {PV <: LiquidMoisture} = nothing
-filter_source(pv::PV, m::MoistureModel, s::Rain_1M{PV}) where {PV} = s
+filter_source(pv::PV, ::NonEquilMoist,  s::WarmRain_1M{PV},) where {PV <: LiquidMoisture} = s
+filter_source(pv::PV, ::MoistureModel,  s::WarmRain_1M{PV},) where {PV <: LiquidMoisture} = nothing
+filter_source(pv::PV, m::MoistureModel, s::WarmRain_1M{PV})  where {PV} = s
+filter_source(pv::PV, m::AtmosModel,    s::WarmRain_1M{PV})  where {PV} = filter_source(pv, m.moisture, s)
 
-filter_source(pv::PV, m::AtmosModel, s::Rain_1M{PV}) where {PV} =
-    filter_source(pv, m.moisture, s)
+filter_source(pv::PV, ::NonEquilMoist,  s::RainSnow_1M{PV},) where {PV <: LiquidMoisture} = s
+filter_source(pv::PV, ::MoistureModel,  s::RainSnow_1M{PV},) where {PV <: LiquidMoisture} = nothing
+filter_source(pv::PV, ::NonEquilMoist,  s::RainSnow_1M{PV},) where {PV <: IceMoisture} = s
+filter_source(pv::PV, ::MoistureModel,  s::RainSnow_1M{PV},) where {PV <: IceMoisture} = nothing
+filter_source(pv::PV, m::MoistureModel, s::RainSnow_1M{PV})  where {PV} = s
+filter_source(pv::PV, m::AtmosModel,    s::RainSnow_1M{PV})  where {PV} = filter_source(pv, m.moisture, s)
 
 # Filter sources / empty elements
 filter_sources(t::Tuple) = filter(x -> !(x == nothing), t)

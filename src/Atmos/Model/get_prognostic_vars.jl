@@ -9,6 +9,7 @@ prognostic_vars(::NonEquilMoist) =
 
 prognostic_vars(::NoPrecipitation) = ()
 prognostic_vars(::RainModel) = (Rain(),)
+prognostic_vars(::RainSnowModel) = (Rain(), Snow())
 
 prognostic_vars(m::AtmosModel) = (
     Mass(),

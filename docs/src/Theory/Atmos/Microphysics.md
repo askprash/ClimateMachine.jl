@@ -714,6 +714,11 @@ where:
  - ``c_{vl}`` is the isochoric specific heat of liquid water,
  - ``\Phi`` is the effective gravitational potential.
 
+### Rain and Snow
+
+TODO
+
+
 ## Example figures
 
 ```@example example_figures
