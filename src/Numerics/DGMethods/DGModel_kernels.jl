@@ -2512,7 +2512,9 @@ end
                     end
 
                 @unroll for s in 1:ngradstate
-                    l_nG[s] += vMI * sM[f] * l_nG_bc[s]
+                    @unroll for i in 1:3
+                        l_nG[i, s] += vMI * sM[f] * l_nG_bc[i, s]
+                    end
                 end
             end
         end
