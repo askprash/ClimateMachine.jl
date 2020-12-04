@@ -12,7 +12,10 @@ using .NumericalFluxes:
     CentralNumericalFluxGradient
 
 import .NumericalFluxes:
-    numerical_flux_first_order!, numerical_boundary_flux_first_order!
+    numerical_flux_first_order!,
+    numerical_boundary_flux_first_order!,
+    numerical_flux_second_order!,
+    numerical_boundary_flux_second_order!
 
 using ..Mesh.Geometry
 
@@ -77,6 +80,103 @@ function numerical_boundary_flux_first_order!(
             direction,
             Vars{vars_state(balance_law, Prognostic(), FT)}(
                 state_prognostic_bottom1,
+            ),
+            Vars{vars_state(balance_law, Auxiliary(), FT)}(
+                state_auxiliary_bottom1,
+            ),
+        )
+    end d -> throw(BoundsError(bcs, bctag))
+end
+
+function numerical_flux_second_order!(
+    numerical_flux,
+    balance_law,
+    fluxᵀn::MArray,
+    normal_vector,
+    state_prognostic⁻::MArray,
+    state_gradient_flux⁻::MArray,
+    state_hyperdiffusive⁻::MArray,
+    state_auxiliary⁻::MArray,
+    state_prognostic⁺::MArray,
+    state_gradient_flux⁺::MArray,
+    state_hyperdiffusive⁺::MArray,
+    state_auxiliary⁺::MArray,
+    t,
+)
+    FT = eltype(fluxᵀn)
+    numerical_flux_second_order!(
+        numerical_flux,
+        balance_law,
+        Vars{vars_state(balance_law, Prognostic(), FT)}(fluxᵀn),
+        SVector(normal_vector),
+        Vars{vars_state(balance_law, Prognostic(), FT)}(state_prognostic⁻),
+        Vars{vars_state(balance_law, GradientFlux(), FT)}(state_gradient_flux⁻),
+        Vars{vars_state(balance_law, Hyperdiffusive(), FT)}(
+            state_hyperdiffusive⁻,
+        ),
+        Vars{vars_state(balance_law, Auxiliary(), FT)}(state_auxiliary⁻),
+        Vars{vars_state(balance_law, Prognostic(), FT)}(state_prognostic⁺),
+        Vars{vars_state(balance_law, GradientFlux(), FT)}(state_gradient_flux⁺),
+        Vars{vars_state(balance_law, Hyperdiffusive(), FT)}(
+            state_hyperdiffusive⁺,
+        ),
+        Vars{vars_state(balance_law, Auxiliary(), FT)}(state_auxiliary⁺),
+        t,
+    )
+end
+
+function numerical_boundary_flux_second_order!(
+    numerical_flux,
+    bctag,
+    balance_law,
+    fluxᵀn::MArray,
+    normal_vector,
+    state_prognostic⁻::MArray,
+    state_gradient_flux⁻::MArray,
+    state_hyperdiffusive⁻::MArray,
+    state_auxiliary⁻::MArray,
+    state_prognostic⁺::MArray,
+    state_gradient_flux⁺::MArray,
+    state_hyperdiffusive⁺::MArray,
+    state_auxiliary⁺::MArray,
+    t,
+    state_prognostic_bottom1::MArray,
+    state_gradient_flux_bottom1::MArray,
+    state_auxiliary_bottom1::MArray,
+)
+    FT = eltype(fluxᵀn)
+    bcs = boundary_conditions(balance_law)
+    # TODO: there is probably a better way to unroll this loop
+    Base.Cartesian.@nif 7 d -> bctag == d <= length(bcs) d -> begin
+        bc = bcs[d]
+        numerical_boundary_flux_second_order!(
+            numerical_flux,
+            bc,
+            balance_law,
+            Vars{vars_state(balance_law, Prognostic(), FT)}(fluxᵀn),
+            SVector(normal_vector),
+            Vars{vars_state(balance_law, Prognostic(), FT)}(state_prognostic⁻),
+            Vars{vars_state(balance_law, GradientFlux(), FT)}(
+                state_gradient_flux⁻,
+            ),
+            Vars{vars_state(balance_law, Hyperdiffusive(), FT)}(
+                state_hyperdiffusive⁻,
+            ),
+            Vars{vars_state(balance_law, Auxiliary(), FT)}(state_auxiliary⁻),
+            Vars{vars_state(balance_law, Prognostic(), FT)}(state_prognostic⁺),
+            Vars{vars_state(balance_law, GradientFlux(), FT)}(
+                state_gradient_flux⁺,
+            ),
+            Vars{vars_state(balance_law, Hyperdiffusive(), FT)}(
+                state_hyperdiffusive⁺,
+            ),
+            Vars{vars_state(balance_law, Auxiliary(), FT)}(state_auxiliary⁺),
+            t,
+            Vars{vars_state(balance_law, Prognostic(), FT)}(
+                state_prognostic_bottom1,
+            ),
+            Vars{vars_state(balance_law, GradientFlux(), FT)}(
+                state_gradient_flux_bottom1,
             ),
             Vars{vars_state(balance_law, Auxiliary(), FT)}(
                 state_auxiliary_bottom1,
@@ -1067,7 +1167,7 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
         num_state_prognostic = number_states(balance_law, Prognostic())
         num_state_gradient_flux = number_states(balance_law, GradientFlux())
         num_state_auxiliary = number_states(balance_law, Auxiliary())
-        num_state_hyperdiffusion = number_states(balance_law, Hyperdiffusion())
+        num_state_hyperdiffusion = number_states(balance_law, Hyperdiffusive())
         @assert num_state_hyperdiffusion == 0
 
         nface = info.nface
@@ -1119,6 +1219,10 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
         # being evaluated for. In this case we only have `VerticalDirection()`
         # faces
         face_direction = (EveryDirection(), VerticalDirection())
+
+        # Convenience wrappers
+        vars(s) = Vars{vars_state(balance_law, s(), FT)}
+        grad(s) = Grad{vars_state(balance_law, s(), FT)}
     end
 
     # Get the horizontal group IDs
@@ -1232,7 +1336,6 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
                 local_state_hyperdiffusion⁺,
                 local_state_auxiliary⁺,
                 t,
-                face_direction,
             )
         else
             numerical_boundary_flux_first_order!(
@@ -1265,7 +1368,6 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
                 local_state_hyperdiffusion⁺,
                 local_state_auxiliary⁺,
                 t,
-                face_direction,
                 local_state_prognostic_bottom1,
                 local_state_gradient_flux_bottom1,
                 local_state_auxiliary_bottom1,
@@ -1350,7 +1452,6 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
                 local_state_hyperdiffusion⁺,
                 local_state_auxiliary⁺,
                 t,
-                face_direction,
             )
         else
             numerical_boundary_flux_first_order!(
@@ -1383,7 +1484,6 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
                 local_state_hyperdiffusion⁺,
                 local_state_auxiliary⁺,
                 t,
-                face_direction,
                 local_state_prognostic_bottom1,
                 local_state_gradient_flux_bottom1,
                 local_state_auxiliary_bottom1,
