@@ -1,3 +1,5 @@
+NB: need to update MPI on laptop!
+
 #!/bin/bash
 
 #SBATCH --ntasks=32

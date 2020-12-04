@@ -415,6 +415,8 @@ include("filters.jl")
 include("atmos_tendencies.jl")        # specify atmos tendencies
 include("get_prognostic_vars.jl")     # get tuple of prognostic variables
 
+include("insider_model.jl")     # for vorticity
+
 """
     flux_first_order!(
         m::AtmosModel,
