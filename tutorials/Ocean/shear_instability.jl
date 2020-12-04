@@ -76,7 +76,7 @@ data_fetcher = EveryXSimulationTime(1) do
 
     @info "$step, $time, $max_u, $wall_time"
 
-    # Fetch some data
+    ## Fetch some data
     push!(
         fetched_states,
         (u = assemble(u), θ = assemble(θ), time = current_time(model)),
