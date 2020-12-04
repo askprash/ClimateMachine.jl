@@ -250,7 +250,6 @@ function stable_bl_model(
             u_slope,
             v_geostrophic,
         ),
-        turbconv_sources(turbconv)...,
     )
     if moisture_model == "dry"
         moisture = DryModel()
@@ -299,9 +298,8 @@ function stable_bl_model(
                     (state, aux, t, normPu_int) -> (u_star / normPu_int)^2,
                 )),
                 energy = energy_bc,
-                turbconv = turbconv_bcs(turbconv)[1],
             ),
-            AtmosBC(turbconv = turbconv_bcs(turbconv)[2]),
+            AtmosBC(),
         )
     else
         boundary_conditions = (
@@ -313,9 +311,8 @@ function stable_bl_model(
                 )),
                 energy = energy_bc,
                 moisture = moisture_bc,
-                turbconv = turbconv_bcs(turbconv)[1],
             ),
-            AtmosBC(turbconv = turbconv_bcs(turbconv)[2]),
+            AtmosBC(),
         )
     end
 
@@ -332,7 +329,7 @@ function stable_bl_model(
         problem = problem,
         turbulence = SmagorinskyLilly{FT}(C_smag),
         moisture = moisture,
-        source = source,
+        source = source_default,
         turbconv = turbconv,
     )
 
