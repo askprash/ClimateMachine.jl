@@ -13,6 +13,7 @@ filter_source(pv::PV, s::Gravity{PV}) where {PV <: Momentum} = s
 filter_source(pv::PV, s::GeostrophicForcing{PV}) where {PV <: Momentum} = s
 filter_source(pv::PV, s::Coriolis{PV}) where {PV <: Momentum} = s
 filter_source(pv::PV, s::RayleighSponge{PV}) where {PV <: Momentum} = s
+filter_source(pv::PV, s::EnergySponge{PV}) where {PV <: Energy} = s
 filter_source(pv::PV, s::CreateClouds{PV}) where {PV <: LiquidMoisture} = s
 filter_source(pv::PV, s::CreateClouds{PV}) where {PV <: IceMoisture} = s
 

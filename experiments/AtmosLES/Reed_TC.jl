@@ -1,6 +1,8 @@
 #!/usr/bin/env julia --project
+using NCDatasets
+using DelimitedFiles
 using ClimateMachine
-
+using ClimateMachine.ArtifactWrappers
 using ClimateMachine.Atmos
 using ClimateMachine.Orientations
 using ClimateMachine.ConfigTypes
@@ -26,7 +28,8 @@ using LinearAlgebra
 using Printf
 
 using CLIMAParameters
-using CLIMAParameters.Planet: planet_radius, R_d, Omega, cp_d, MSLP, grav, LH_v0, cv_d
+using CLIMAParameters.Planet:
+    planet_radius, R_d, Omega, cp_d, MSLP, grav, LH_v0, cv_d
 
 using CLIMAParameters.Atmos.Microphysics
 
@@ -56,31 +59,30 @@ microphys = MicropysicsParameterSet(
 const param_set = EarthParameterSet(microphys)
 
 
-import ClimateMachine.BalanceLaws:
-    vars_state,
-    indefinite_stack_integral!,
-    reverse_indefinite_stack_integral!,
-    integral_load_auxiliary_state!,
-    integral_set_auxiliary_state!,
-    reverse_integral_load_auxiliary_state!,
-    reverse_integral_set_auxiliary_state!
-
-import ClimateMachine.BalanceLaws: boundary_state!
-import ClimateMachine.Atmos: flux_second_order!
-
 """
   Initial Condition for DYCOMS_RF01 LES
 
 ## References
  - [Stevens2005](@cite)
 """
-function init_dycoms!(problem, bl, state, aux, localgeo, t)
+function init_ReedTC!(problem, bl, state, aux, localgeo, t)
     FT = eltype(state)
-
     (x, y, z) = localgeo.coord
 
-    z = altitude(bl, aux)
+    height = altitude(bl, aux)
 
+    if bl.orientation isa SphericalOrientation
+        r = sqrt(x^2 + y^2 + z^2)
+        lat = asin(z / r)
+        lon = atan(y, x + 1e-10)
+        cen_lat = FT(10)
+        cen_lon = FT(180)
+    else
+        lat = x
+        lon = y
+        cen_lat = FT(0)
+        cen_lon = FT(0)
+    end
     # These constants are those used by Stevens et al. (2005)
     q0 = FT(0.021)
     qtrop = 1e-11
@@ -91,95 +93,148 @@ function init_dycoms!(problem, bl, state, aux, localgeo, t)
     sigma_z = FT(2000)
     r_b = FT(40000)
     z_b = FT(5000)
-    q_pt_sfc = PhasePartition(qref)
-    Rm_sfc = gas_constant_air(bl.param_set, q_pt_sfc)
     Ts0 = FT(302.15)
     constTv = FT(0.608)
     _MSLP = FT(MSLP(bl.param_set))
     _grav = FT(grav(bl.param_set))
     rp = FT(282000)
-    cen_lat = FT(0)
-    cen_lon = FT(0)
     convert = FT(180) / pi
-    _Omega::FT = Omega(m.param_set)
-    _R_d::FT = R_d(m.param_set)
-    _cp::FT = cp_d(m.param_set)
-    _cv::FT = cv_d(m.param_set)
-    γ::FT = _cp / _cv
-    _PR = planet_radius(m.param_set)
+    _Omega::FT = Omega(bl.param_set)
+    _R_d::FT = R_d(bl.param_set)
+    _cp::FT = cp_d(bl.param_set)
+    _cv::FT = cv_d(bl.param_set)
+    γ = FT(0.007)
+    _PR = planet_radius(bl.param_set)
     ztrop = FT(15000)
     exppr = FT(1.5)
     zp = FT(7000)
     exppz = FT(2)
+    dp = FT(1115)
     exponent = _R_d * γ / _grav
     T0 = Ts0 * (FT(1) + constTv * q0)
     Ttrop = Ts0 - γ * ztrop
     ptrop = _MSLP * (Ttrop / T0)^(FT(1) / exponent)
-    lat = y
-    lon = x
-    
-    f = FT(2) * _Omega * sin(cen_lat / convert)
-    gr = _PR * acos(sin(cen_lat / convert) * sin(lat) + (cos(cen_lat / convert) * cos(lat) * cos(lon - cen_lon / convert))) 
-    # if cartesian
-    gr = sqrt((cen_lat - lat)^2 + (cen_lon - lon)^2)
-    f = FT(5e-5)
+
+    if bl.orientation isa SphericalOrientation
+        f = FT(2) * _Omega * sin(cen_lat / convert)
+        gr =
+            _PR * acos(
+                sin(cen_lat / convert) * sin(lat) + (
+                    cos(cen_lat / convert) *
+                    cos(lat) *
+                    cos(lon - cen_lon / convert)
+                ),
+            )
+    else
+        gr = sqrt((cen_lat - lat)^2 + (cen_lon - lon)^2)
+        f = FT(5e-5)
+    end
     ps = _MSLP - dp * exp(-(gr / rp)^exppr)
-    height = z
     if (height > ztrop)
-      p = ptrop * exp(-(_grav * (height - ztrop)) / (_R_d * Ttrop))
-      pb = p
-    else 
-      p = (_MSLP - dp * exp(-(gr / rp)^exppr) * exp(-(height / zp)^exppz)) * ((T0 - γ * height) / T0)^(1/exponent)
-      pb = _MSLP * ((T0 - γ * height) / T0)^(1/exponent)
+        p = ptrop * exp(-(_grav * (height - ztrop)) / (_R_d * Ttrop))
+        pb = p
+    else
+        p =
+            (_MSLP - dp * exp(-(gr / rp)^exppr) * exp(-(height / zp)^exppz)) *
+            ((T0 - γ * height) / T0)^(1 / exponent)
+        pb = _MSLP * ((T0 - γ * height) / T0)^(1 / exponent)
     end
-    d1 = sin(cen_lat / convert) * cos(lat) - cos(cen_lat / convert) * sin(lat) * cos(lon - cen_lon / convert)
-    d2 = cos(cen_lat / convert) * sin(lon - cen_lon / convert)
-    d = max(1e-25, sqrt(d1^2 + d2^2))
-    ufac = d1 / d
-    vfac = d2 / d
-    if not sphere
-      angle = atan(lon - cen_lon, lat - cen_lat)
-      theta = pi / 2 + angle
-      radial_decay = exp(-height * height/(2 * 5823 * 5823)) * exp(-(gr/200000)^6)
-      ufac = cos(theta) * radial_decay
-      vfac = sin(theta) * radial_decay
+    if bl.orientation isa SphericalOrientation
+        d1 =
+            sin(cen_lat / convert) * cos(lat) -
+            cos(cen_lat / convert) * sin(lat) * cos(lon - cen_lon / convert)
+        d2 = cos(cen_lat / convert) * sin(lon - cen_lon / convert)
+        d = max(1e-25, sqrt(d1^2 + d2^2))
+        ufac = d1 / d
+        vfac = d2 / d
+    else
+        angle = atan(lon - cen_lon, lat - cen_lat)
+        theta = pi / 2 + angle
+        radial_decay =
+            exp(-height * height / (2 * 5823 * 5823)) * exp(-(gr / 200000)^6)
+        ufac = cos(theta) * radial_decay
+        vfac = sin(theta) * radial_decay
     end
     if (height > ztrop)
-      us = FT(0)
-      vs = FT(0)
-    else 
-      vs = vfac * (-f * gr / 2 + sqrt((f * gr / 2)^2 - exppr * (gr / rp)^exppr * _R_d * (T0 - γ * height) / (exppz * height * R_d * (T0 - γ * height) / (_grav * zp^exppz) + (FT(1) - _MSLP / dp * exp((gr/rp)^exppr) * exp((height / zp)^exppz)))))
-      us = ufac * (-f * gr / 2 + sqrt((f * gr / 2)^2 - exppr * (gr / rp)^exppr * _R_d * (T0 - γ * height) / (exppz * height * R_d * (T0 - γ * height) / (_grav * zp^exppz) + (FT(1) - _MSLP / dp * exp((gr/rp)^exppr) * exp((height / zp)^exppz)))))
+        us = FT(0)
+        vs = FT(0)
+    else
+        vs =
+            vfac * (
+                -f * gr / 2 + sqrt(
+                    (f * gr / 2)^2 -
+                    exppr * (gr / rp)^exppr * _R_d * (T0 - γ * height) / (
+                        exppz * height * _R_d * (T0 - γ * height) /
+                        (_grav * zp^exppz) + (
+                            FT(1) -
+                            _MSLP / dp *
+                            exp((gr / rp)^exppr) *
+                            exp((height / zp)^exppz)
+                        )
+                    ),
+                )
+            )
+        us =
+            ufac * (
+                -f * gr / 2 + sqrt(
+                    (f * gr / 2)^2 -
+                    exppr * (gr / rp)^exppr * _R_d * (T0 - γ * height) / (
+                        exppz * height * _R_d * (T0 - γ * height) /
+                        (_grav * zp^exppz) + (
+                            FT(1) -
+                            _MSLP / dp *
+                            exp((gr / rp)^exppr) *
+                            exp((height / zp)^exppz)
+                        )
+                    ),
+                )
+            )
     end
     u = FT(us)
     v = FT(vs)
-    w = FT(0) 
-    if sphere
-      u = -us * sin(lon) - vs * sin(lat) * cos(lon)
-      v = us * cos(lon) - vs * sin(lat) * cos(lon)
-      w = vs * cos(lat)
+    w = FT(0)
+    if bl.orientation isa SphericalOrientation
+        u = -us * sin(lon) - vs * sin(lat) * cos(lon)
+        v = us * cos(lon) - vs * sin(lat) * cos(lon)
+        w = vs * cos(lat)
     end
     if (height > ztrop)
-       q = qtrop
-    else 
-       q = q0*exp(-height/zq1) * exp(-(height/zq2)^exppz)
+        q = qtrop
+    else
+        q = q0 * exp(-height / zq1) * exp(-(height / zq2)^exppz)
     end
     qb = q
     if (height > ztrop)
-      T = Ttrop
-      Tb = T
+        T = Ttrop
+        Tb = T
     else
-      T = (T0 - γ * height) / (FT(1) + constTv * q) / (FT(1) + exppz * _R_d * (T0 - γ * height) * height / (_grav * zp * exppz * (FT(1) - _MSLP / dp * exp((gr/rp)^exppr) * exp((height/zp)^exppz))))
-      Tb = (T0 - γ * height)/(FT(1) + constTv * q)
+        T =
+            (T0 - γ * height) / (FT(1) + constTv * q) / (
+                FT(1) +
+                exppz * _R_d * (T0 - γ * height) * height / (
+                    _grav *
+                    zp^exppz *
+                    (
+                        FT(1) -
+                        _MSLP / dp *
+                        exp((gr / rp)^exppr) *
+                        exp((height / zp)^exppz)
+                    )
+                )
+            )
+        Tb = (T0 - γ * height) / (FT(1) + constTv * q)
     end
     wavenumber = 3
     angle = atan(lat - cen_lat, lon - cen_lon)
-    wave = FT(exp(complex(0,1) * (wavenumber * (pi / 2 - angle))))
-    pert = wave * theta_0 * exp(-((gr - r_b) / sigma_r)^2 - ((height - z_b) / sigma_z)^2)
+    wave = FT(real.(exp(complex(0, 1) * (wavenumber * (pi / 2 - angle)))))
+   pert =
+        wave *
+        theta_0 *
+        exp(-((gr - r_b) / sigma_r)^2 - ((height - z_b) / sigma_z)^2)
     T = T + pert
+    ρ = p / (_R_d * T * (FT(1) + constTv * q))
 
-    ts = PhaseEquil_pθq(bl.param_set, p, θ_liq, q_tot)
-    ρ = air_density(ts)
+    ts = PhaseEquil_ρTq(bl.param_set, ρ, T, q)
 
     e_kin = FT(1 / 2) * FT((u^2 + v^2 + w^2))
     e_pot = gravitational_potential(bl.orientation, aux)
@@ -189,7 +244,7 @@ function init_dycoms!(problem, bl, state, aux, localgeo, t)
     state.ρu = SVector(ρ * u, ρ * v, ρ * w)
     state.ρe = E
 
-    state.moisture.ρq_tot = ρ * q_tot
+    state.moisture.ρq_tot = ρ * q
 
     if bl.moisture isa NonEquilMoist
         q_init = PhasePartition(ts)
@@ -199,11 +254,40 @@ function init_dycoms!(problem, bl, state, aux, localgeo, t)
     if bl.precipitation isa Rain
         state.precipitation.ρq_rai = FT(0)
     end
-
+    pi_b = (p / _MSLP)^(_R_d / _cp)
+    theta_b = Tb / pi_b
+    ρ_b = _MSLP / (_R_d * theta_b) * pi_b^(_cv / _R_d)
+    tsb = PhaseEquil_ρTq(bl.param_set, ρ_b, Tb, q)
+    E_b = ρ_b * total_energy(FT(0), e_pot, tsb)
+    #aux.ref_state.ρ = ρ_b
+    #aux.ref_state.T = Tb
+    #aux.ref_state.p = pb
+    #aux.ref_state.ρe = E_b
     return nothing
 end
 
-function config_dycoms(
+
+function read_sounding()
+    #read in the original squal sounding
+    soundings_dataset = ArtifactWrapper(joinpath(@__DIR__, "Artifacts.toml"),
+        "soundings",
+	ArtifactFile[ArtifactFile(url = "https://caltech.box.com/shared/static/rjnvt2dlw7etm1c7mmdfrkw5gnfds5lx.nc",filename = "sounding_gabersek.nc",),],
+    )
+    data_folder = get_data_folder(soundings_dataset)
+    fsounding = joinpath(data_folder, "sounding_gabersek.nc")
+    sounding = Dataset(fsounding, "r")
+    height = sounding["height [m]"][:]
+    θ = sounding["theta [K]"][:]
+    q_vap = sounding["qv [g kg⁻¹]"][:]
+    u = sounding["u [m s⁻¹]"][:]
+    v = sounding["v [m s⁻¹]"][:]
+    p = sounding["pressure [Pa]"][:]
+    close(sounding)
+    return (height = height, θ = θ, q_vap = q_vap, u = u, v = v, p = p)
+end
+
+
+function config_ReedTC(
     FT,
     N,
     resolution,
@@ -214,65 +298,64 @@ function config_dycoms(
     precipitation_model = "noprecipitation",
 )
     # Reference state
-    T_profile = DecayingTemperatureProfile{FT}(param_set)
-    ref_state = HydrostaticState(T_profile)
+    nt = read_sounding()
 
-    # Radiation model
-    κ = FT(85)
-    α_z = FT(1)
-    z_i = FT(840)
-    ρ_i = FT(1.13)
+    zinit = nt.height
+    tinit = nt.θ
+    qinit = nt.q_vap .* 0.001
+    u_init = nt.u
+    v_init = nt.v
+    p_init = nt.p
 
-    D_subsidence = FT(3.75e-6)
+    maxz = length(zinit)
+    thinit = zeros(maxz)
+    piinit = zeros(maxz)
+    thinit[1] = tinit[1] / (1 + 0.61 * qinit[1])
+    piinit[1] = 1
+    for k in 2:maxz
+        thinit[k] = tinit[k] / (1 + 0.61 * qinit[k])
+        piinit[k] =
+            piinit[k - 1] -
+            9.81 / (1004 * 0.5 * (tinit[k] + tinit[k - 1])) *
+            (zinit[k] - zinit[k - 1])
+    end
+    T_min = FT(thinit[maxz] * piinit[maxz])
+    T_s = FT(thinit[1] * piinit[1])
+    Γ_lapse = FT(9.81 / 1004)
+    tvmax = 302 * (1 + 0.61 * 0.022)
+    deltatv = -(T_min - tvmax)
+    tvmin = 197 * (1 + 0.61 * 1e-11)
+    @info deltatv
+    htv = 8000.0
+    #T = DecayingTemperatureProfile(T_min, T_s, Γ_lapse)
+    Tv = DecayingTemperatureProfile{FT}(param_set, tvmax, tvmin, htv)
+    rel_hum = FT(0)
+    ref_state = HydrostaticState(Tv, rel_hum)
 
-    F_0 = FT(70)
-    F_1 = FT(22)
     if moisture_model == "equilibrium"
         equilibrium_moisture_model = true
     else
         equilibrium_moisture_model = false
     end
-    radiation = DYCOMSRadiation{FT}(
-        κ,
-        α_z,
-        z_i,
-        ρ_i,
-        D_subsidence,
-        F_0,
-        F_1,
-        equilibrium_moisture_model,
-    )
 
     # Sources
-    f_coriolis = FT(0.762e-4)
-    u_geostrophic = FT(7.0)
-    v_geostrophic = FT(-5.5)
     w_ref = FT(0)
-    u_relaxation = SVector(u_geostrophic, v_geostrophic, w_ref)
+    u_relaxation = SVector(w_ref, w_ref, w_ref)
     # Sponge
-    c_sponge = 1
+    c_sponge = FT(0.75)
     # Rayleigh damping
-    zsponge = FT(1000.0)
+    zsponge = FT(15000.0)
     rayleigh_sponge =
         RayleighSponge(FT, zmax, zsponge, c_sponge, u_relaxation, 2)
     # Geostrophic forcing
-    geostrophic_forcing =
-        GeostrophicForcing(FT, f_coriolis, u_geostrophic, v_geostrophic)
-
+    energy_sponge =
+        EnergySponge(FT, zmax, zsponge, c_sponge, u_relaxation, 2)
     # Boundary conditions
     # SGS Filter constants
     C_smag = FT(0.21) # 0.21 for stable testing, 0.18 in practice
     C_drag = FT(0.0011)
-    LHF = FT(115)
-    SHF = FT(15)
-    moisture_flux = LHF / FT(LH_v0(param_set))
 
-    source = (
-        Gravity(),
-        rayleigh_sponge,
-        Subsidence(D_subsidence)...,
-        geostrophic_forcing,
-    )
+    source = (Gravity(), Coriolis(),rayleigh_sponge, energy_sponge, RemovePrecipitation(false))
 
     # moisture model and its sources
     if moisture_model == "equilibrium"
@@ -307,18 +390,24 @@ function config_dycoms(
     problem = AtmosProblem(
         boundaryconditions = (
             AtmosBC(
-                momentum = Impenetrable(DragLaw(
-                    (state, aux, t, normPu) -> C_drag,
-                )),
-                energy = PrescribedEnergyFlux((state, aux, t) -> LHF + SHF),
-                moisture = PrescribedMoistureFlux(
-                    (state, aux, t) -> moisture_flux,
+                momentum = (Impenetrable(DragLaw(
+                    (state, aux, t, normPu) -> C_drag + 4 * 1e-5 * normPu,
+                ))),
+                energy = BulkFormulaEnergy(
+                    (atmos, state, aux, t, normPu) -> C_drag + 4 * 1e-5 * normPu,
+                    (atmos, state, aux, t) -> (aux.moisture.temperature, state.moisture.ρq_tot),
+                ),
+                moisture = BulkFormulaMoisture(
+                    (state, aux, t, normPu) -> C_drag + 4 * 1e-5 * normPu,
+                    (state, aux, t) -> state.moisture.ρq_tot,
                 ),
             ),
             AtmosBC(),
+            #AtmosBC(energy = PrescribedTemperature((state⁻, aux⁻, t)-> 218),)
         ),
-        init_state_prognostic = init_dycoms!,
+        init_state_prognostic = init_ReedTC!,
     )
+
 
     model = AtmosModel{FT}(
         AtmosLESConfigType,
@@ -328,7 +417,6 @@ function config_dycoms(
         turbulence = Vreman{FT}(C_smag),
         moisture = moisture,
         precipitation = precipitation,
-        radiation = radiation,
         source = source,
     )
 
@@ -337,14 +425,16 @@ function config_dycoms(
     )
 
     config = ClimateMachine.AtmosLESConfiguration(
-        "DYCOMS",
+        "ReedTC",
         N,
         resolution,
         xmax,
         ymax,
         zmax,
         param_set,
-        init_dycoms!,
+        init_ReedTC!,
+        xmin = -xmax,
+        ymin = -ymax,
         solver_type = ode_solver,
         model = model,
     )
@@ -391,19 +481,19 @@ function main()
     N = 4
 
     # Domain resolution and size
-    Δh = FT(40)
-    Δv = FT(20)
+    Δh = FT(10000)
+    Δv = FT(400)
     resolution = (Δh, Δh, Δv)
 
-    xmax = FT(1000)
-    ymax = FT(1000)
-    zmax = FT(1500)
+    xmax = FT(1000000)
+    ymax = FT(1000000)
+    zmax = FT(24000)
 
     t0 = FT(0)
-    timeend = FT(100) #FT(4 * 60 * 60)
-    Cmax = FT(1.7)     # use this for single-rate explicit LSRK144
+    timeend = FT(86400) #FT(4 * 60 * 60)
+    Cmax = FT(0.4)     # use this for single-rate explicit LSRK144
 
-    driver_config = config_dycoms(
+    driver_config = config_ReedTC(
         FT,
         N,
         resolution,

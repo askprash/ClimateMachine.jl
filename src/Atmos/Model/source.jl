@@ -97,6 +97,18 @@ function atmos_source!(
 )
     # Migrated to Σsources
 end
+function atmos_source!(
+		           s::EnergySponge,
+			       atmos::AtmosModel,
+			           source::Vars,
+				       state::Vars,
+				           diffusive::Vars,
+					       aux::Vars,
+					           t::Real,
+						       direction,
+						       )
+    # Migrated to Σsources
+end
 
 function atmos_source!(
     ::CreateClouds,
