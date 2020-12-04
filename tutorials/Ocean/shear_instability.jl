@@ -5,7 +5,6 @@
 
 using Printf
 using Plots
-using Revise
 using ClimateMachine
 
 ClimateMachine.init()

@@ -9,7 +9,6 @@ ENV["GKSwstype"] = "nul"
 using Plots
 using JLD2
 using Plots
-using Revise
 using ClimateMachine
 using CUDA
 
