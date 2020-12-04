@@ -1783,7 +1783,7 @@ function launch_interface_gradients_of_laplacians!(
 end
 
 """
-    launch_volume_tendency!(dg, state_prognostic, t; dependencies)
+    launch_volume_tendency!(spacedisc, state_prognostic, t; dependencies)
 
 Launches horizontal and vertical volume kernels for computing tendencies (sources, sinks, etc).
 """
@@ -1796,16 +1796,14 @@ function launch_volume_tendency!(
     β;
     dependencies,
 )
-    # XXX: This is until FVM with diffusion is implemented
+    # XXX: This is until FVM with hyperdiffusion is implemented
     if spacedisc isa DGFVMModel
-        @assert 0 == number_states(spacedisc.balance_law, GradientFlux())
         @assert 0 == number_states(spacedisc.balance_law, Hyperdiffusive())
         Qhypervisc_grad_data = nothing
-        grad_flux_data = nothing
     elseif spacedisc isa DGModel
         Qhypervisc_grad_data = spacedisc.states_higher_order[1].data
-        grad_flux_data = spacedisc.state_gradient_flux.data
     end
+    grad_flux_data = spacedisc.state_gradient_flux.data
 
     # Workgroup is determined by the number of quadrature points
     # in the horizontal direction. For each horizontal quadrature
@@ -1932,16 +1930,13 @@ function launch_interface_tendency!(
     @assert surface === :interior || surface === :exterior
     # XXX: This is until FVM with diffusion is implemented
     if spacedisc isa DGFVMModel
-        @assert 0 == number_states(spacedisc.balance_law, GradientFlux())
         @assert 0 == number_states(spacedisc.balance_law, Hyperdiffusive())
         Qhypervisc_grad_data = nothing
-        grad_flux_data = nothing
-        numerical_flux_second_order = NothingFlux()
     elseif spacedisc isa DGModel
         Qhypervisc_grad_data = spacedisc.states_higher_order[1].data
-        grad_flux_data = spacedisc.state_gradient_flux.data
-        numerical_flux_second_order = spacedisc.numerical_flux_second_order
     end
+    grad_flux_data = spacedisc.state_gradient_flux.data
+    numerical_flux_second_order = spacedisc.numerical_flux_second_order
 
     info = basic_launch_info(spacedisc)
     comp_stream = dependencies
@@ -2052,14 +2047,14 @@ function launch_interface_tendency!(
                 Val(periodicstack),
                 VerticalDirection(),
                 spacedisc.numerical_flux_first_order,
+                numerical_flux_second_order,
                 tendency.data,
                 state_prognostic.data,
+                grad_flux_data,
                 spacedisc.state_auxiliary.data,
                 spacedisc.grid.vgeo,
                 spacedisc.grid.sgeo,
                 t,
-                spacedisc.grid.vmap⁻,
-                spacedisc.grid.vmap⁺,
                 spacedisc.grid.elemtobndy,
                 elems,
                 α;

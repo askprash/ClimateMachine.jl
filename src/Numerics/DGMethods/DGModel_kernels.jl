@@ -1049,14 +1049,14 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
     ::Val{periodicstack},
     ::VerticalDirection,
     numerical_flux_first_order,
+    numerical_flux_second_order,
     tendency,
     state_prognostic,
+    state_gradient_flux,
     state_auxiliary,
     _,
     sgeo,
     t,
-    _,
-    _,
     elemtobndy,
     elems,
     α,
@@ -1065,7 +1065,11 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
         dim = info.dim
         FT = eltype(state_prognostic)
         num_state_prognostic = number_states(balance_law, Prognostic())
+        num_state_gradient_flux = number_states(balance_law, GradientFlux())
         num_state_auxiliary = number_states(balance_law, Auxiliary())
+        num_state_hyperdiffusion = number_states(balance_law, Hyperdiffusion())
+        @assert num_state_hyperdiffusion == 0
+
         nface = info.nface
         Np = info.Np
         Nqk = info.Nqk # can only be 1 for the FVM method!
@@ -1075,23 +1079,39 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
         faces = (nface - 1):nface
 
         local_state_prognostic⁻ = MArray{Tuple{num_state_prognostic}, FT}(undef)
+        local_state_gradient_flux⁻ =
+            MArray{Tuple{num_state_gradient_flux}, FT}(undef)
         local_state_auxiliary⁻ = MArray{Tuple{num_state_auxiliary}, FT}(undef)
+        local_state_hyperdiffusion⁻ =
+            MArray{Tuple{num_state_hyperdiffusion}, FT}(undef)
 
         local_state_prognostic⁺ = MArray{Tuple{num_state_prognostic}, FT}(undef)
-
+        local_state_gradient_flux⁺ =
+            MArray{Tuple{num_state_gradient_flux}, FT}(undef)
         local_state_auxiliary⁺ = MArray{Tuple{num_state_auxiliary}, FT}(undef)
+        local_state_hyperdiffusion⁺ =
+            MArray{Tuple{num_state_hyperdiffusion}, FT}(undef)
 
         local_state_prognostic_bottom1 =
             MArray{Tuple{num_state_prognostic}, FT}(undef)
+        local_state_gradient_flux_bottom1 =
+            MArray{Tuple{num_state_gradient_flux}, FT}(undef)
         local_state_auxiliary_bottom1 =
             MArray{Tuple{num_state_auxiliary}, FT}(undef)
 
         # XXX: will revisit this later for FVM
         fill!(local_state_prognostic_bottom1, NaN)
+        fill!(local_state_gradient_flux_bottom1, NaN)
         fill!(local_state_auxiliary_bottom1, NaN)
 
-        local_flux_top = MArray{Tuple{num_state_prognostic}, FT}(undef)
-        local_flux_bottom = MArray{Tuple{num_state_prognostic}, FT}(undef)
+        local_first_order_flux_top =
+            MArray{Tuple{num_state_prognostic}, FT}(undef)
+        local_first_order_flux_bottom =
+            MArray{Tuple{num_state_prognostic}, FT}(undef)
+        local_second_order_flux_top =
+            MArray{Tuple{num_state_prognostic}, FT}(undef)
+        local_second_order_flux_bottom =
+            MArray{Tuple{num_state_prognostic}, FT}(undef)
 
         sM = MArray{Tuple{2}, FT}(undef)
 
@@ -1115,13 +1135,22 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
     n = @index(Local, Linear)
 
     # Loads the data for a given element
-    function load_data!(local_state_prognostic, local_state_auxiliary, e)
+    function load_data!(
+        local_state_prognostic,
+        local_state_auxiliary,
+        local_state_gradient_flux,
+        e,
+    )
         @unroll for s in 1:num_state_prognostic
             local_state_prognostic[s] = state_prognostic[n, s, e]
         end
 
         @unroll for s in 1:num_state_auxiliary
             local_state_auxiliary[s] = state_auxiliary[n, s, e]
+        end
+
+        @unroll for s in 1:num_state_gradient_flux
+            local_state_gradient_flux[s] = state_gradient_flux[n, s, e]
         end
     end
 
@@ -1154,20 +1183,53 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
         end
 
         # Load minus and plus side data
-        load_data!(local_state_prognostic⁻, local_state_auxiliary⁻, e⁻)
-        load_data!(local_state_prognostic⁺, local_state_auxiliary⁺, e⁺)
+        load_data!(
+            local_state_prognostic⁻,
+            local_state_auxiliary⁻,
+            local_state_gradient_flux⁻,
+            e⁻,
+        )
+        load_data!(
+            local_state_prognostic⁺,
+            local_state_auxiliary⁺,
+            local_state_gradient_flux⁺,
+            e⁺,
+        )
 
         # compute the flux
-        fill!(local_flux_bottom, -zero(eltype(local_flux_bottom)))
+        fill!(
+            local_first_order_flux_bottom,
+            -zero(eltype(local_first_order_flux_bottom)),
+        )
+        fill!(
+            local_second_order_flux_bottom,
+            -zero(eltype(local_second_order_flux_bottom)),
+        )
         if bctag == 0
             numerical_flux_first_order!(
                 numerical_flux_first_order,
                 balance_law,
-                local_flux_bottom,
+                local_first_order_flux_bottom,
                 normal_vector,
                 local_state_prognostic⁻,
                 local_state_auxiliary⁻,
                 local_state_prognostic⁺,
+                local_state_auxiliary⁺,
+                t,
+                face_direction,
+            )
+            numerical_flux_second_order!(
+                numerical_flux_second_order,
+                balance_law,
+                local_second_order_flux_bottom,
+                normal_vector,
+                local_state_prognostic⁻,
+                local_state_gradient_flux⁻,
+                local_state_hyperdiffusion⁻,
+                local_state_auxiliary⁻,
+                local_state_prognostic⁺,
+                local_state_gradient_flux⁺,
+                local_state_hyperdiffusion⁺,
                 local_state_auxiliary⁺,
                 t,
                 face_direction,
@@ -1177,7 +1239,7 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
                 numerical_flux_first_order,
                 bctag,
                 balance_law,
-                local_flux_bottom,
+                local_first_order_flux_bottom,
                 normal_vector,
                 local_state_prognostic⁻,
                 local_state_auxiliary⁻,
@@ -1186,6 +1248,26 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
                 t,
                 face_direction,
                 local_state_prognostic_bottom1,
+                local_state_auxiliary_bottom1,
+            )
+            numerical_boundary_flux_second_order!(
+                numerical_flux_second_order,
+                bctag,
+                balance_law,
+                local_second_order_flux_bottom,
+                normal_vector,
+                local_state_prognostic⁻,
+                local_state_gradient_flux⁻,
+                local_state_hyperdiffusion⁻,
+                local_state_auxiliary⁻,
+                local_state_prognostic⁺,
+                local_state_gradient_flux⁺,
+                local_state_hyperdiffusion⁺,
+                local_state_auxiliary⁺,
+                t,
+                face_direction,
+                local_state_prognostic_bottom1,
+                local_state_gradient_flux_bottom1,
                 local_state_auxiliary_bottom1,
             )
         end
@@ -1225,19 +1307,47 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
         end
 
         # Load plus side data (minus data is already set)
-        load_data!(local_state_prognostic⁺, local_state_auxiliary⁺, e⁺)
+        load_data!(
+            local_state_prognostic⁺,
+            local_state_auxiliary⁺,
+            local_state_gradient_flux⁺,
+            e⁺,
+        )
 
         # compute the flux
-        fill!(local_flux_top, -zero(eltype(local_flux_top)))
+        fill!(
+            local_first_order_flux_top,
+            -zero(eltype(local_first_order_flux_top)),
+        )
+        fill!(
+            local_second_order_flux_top,
+            -zero(eltype(local_second_order_flux_top)),
+        )
         if bctag == 0
             numerical_flux_first_order!(
                 numerical_flux_first_order,
                 balance_law,
-                local_flux_top,
+                local_first_order_flux_top,
                 normal_vector,
                 local_state_prognostic⁻,
                 local_state_auxiliary⁻,
                 local_state_prognostic⁺,
+                local_state_auxiliary⁺,
+                t,
+                face_direction,
+            )
+            numerical_flux_second_order!(
+                numerical_flux_second_order,
+                balance_law,
+                local_second_order_flux_top,
+                normal_vector,
+                local_state_prognostic⁻,
+                local_state_gradient_flux⁻,
+                local_state_hyperdiffusion⁻,
+                local_state_auxiliary⁻,
+                local_state_prognostic⁺,
+                local_state_gradient_flux⁺,
+                local_state_hyperdiffusion⁺,
                 local_state_auxiliary⁺,
                 t,
                 face_direction,
@@ -1247,7 +1357,7 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
                 numerical_flux_first_order,
                 bctag,
                 balance_law,
-                local_flux_bottom,
+                local_first_order_flux_bottom,
                 normal_vector,
                 local_state_prognostic⁻,
                 local_state_auxiliary⁻,
@@ -1256,6 +1366,26 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
                 t,
                 face_direction,
                 local_state_prognostic_bottom1,
+                local_state_auxiliary_bottom1,
+            )
+            numerical_boundary_flux_second_order!(
+                numerical_flux_second_order,
+                bctag,
+                balance_law,
+                local_second_order_flux_bottom,
+                normal_vector,
+                local_state_prognostic⁻,
+                local_state_gradient_flux⁻,
+                local_state_hyperdiffusion⁻,
+                local_state_auxiliary⁻,
+                local_state_prognostic⁺,
+                local_state_gradient_flux⁺,
+                local_state_hyperdiffusion⁺,
+                local_state_auxiliary⁺,
+                t,
+                face_direction,
+                local_state_prognostic_bottom1,
+                local_state_gradient_flux_bottom1,
                 local_state_auxiliary_bottom1,
             )
         end
@@ -1267,11 +1397,21 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
             tendency[n, s, e⁻] -=
                 α *
                 vMI *
-                (sM[2] * local_flux_top[s] + sM[1] * local_flux_bottom[s])
+                (
+                    sM[2] * (
+                        local_first_order_flux_top[s] +
+                        local_second_order_flux_top[s]
+                    ) +
+                    sM[1] * (
+                        local_first_order_flux_bottom[s] +
+                        local_second_order_flux_bottom[s]
+                    )
+                )
         end
 
         # Set the flux bottom flux for the next element
-        local_flux_bottom .= -local_flux_top
+        local_first_order_flux_bottom .= -local_first_order_flux_top
+        local_second_order_flux_bottom .= -local_second_order_flux_top
 
         # set the surface mass matrix
         sM[1] = sM[2]
@@ -1279,6 +1419,7 @@ A finite volume reconstruction is used to construction `Fⁱⁿᵛ⋆`
         # the current plus side is the next minus side
         local_state_prognostic⁻ .= local_state_prognostic⁺
         local_state_auxiliary⁻ .= local_state_auxiliary⁺
+        local_state_gradient_flux⁻ .= local_state_gradient_flux⁺
     end
 end
 
